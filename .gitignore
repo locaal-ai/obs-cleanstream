@@ -1,4 +1,6 @@
 build_x86_64
+build_x64
+release/
 
 .DS_Store
 

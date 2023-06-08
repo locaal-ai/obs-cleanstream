@@ -17,7 +17,7 @@ on:
       - main
 
 env:
-  PLUGIN_NAME: 'obs-backgroundremoval'
+  PLUGIN_NAME: 'obs-cleanstream'
 
 jobs:
   clang_check:

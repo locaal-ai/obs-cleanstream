@@ -148,7 +148,7 @@ Usage: %B${functrace[1]%:*}%b <option> [<options>]
     log_info "Packaging ${product_name}..."
     pushd ${project_root}
     pkgbuild \
-      --component "${project_root}/release/obs-backgroundremoval.plugin" \
+      --component "${project_root}/release/obs-cleanstream.plugin" \
       --install-location "/Library/Application Support/obs-studio/plugins" \
       --scripts "${project_root}/cmake/bundle/macos/scripts" \
        "${project_root}/release/${product_name}-flat.pkg"

@@ -37,18 +37,18 @@ jobs:
           arch: ${{ matrix.arch }}
           bundle: obs-studio-plugin-background-removal-${{ steps.setup.outputs.commitHash }}.flatpak
           build-bundle: false
-          manifest-path: ci/flatpak/com.obsproject.Studio.Plugin.backgroundremoval.yaml
-          cache-key: flatpak-builder-${{ hashFiles('ci/flatpak/com.obsproject.Studio.Plugin.backgroundremoval.yaml') }}
+          manifest-path: ci/flatpak/com.obsproject.Studio.Plugin.cleanstream.yaml
+          cache-key: flatpak-builder-${{ hashFiles('ci/flatpak/com.obsproject.Studio.Plugin.cleanstream.yaml') }}
           branch: stable
 
-      # /__w/obs-backgroundremoval/obs-backgroundremoval/
+      # /__w/obs-cleanstream/obs-cleanstream/
       - name: Build Bundle
         shell: bash
         run: |
-          flatpak build-bundle --runtime repo com.obs.Studio.Plugin.backgroundremoval-${{ steps.setup.outputs.commitHash }}.flatpak com.obsproject.Studio.Plugin.backgroundremoval stable
+          flatpak build-bundle --runtime repo com.obs.Studio.Plugin.cleanstream-${{ steps.setup.outputs.commitHash }}.flatpak com.obsproject.Studio.Plugin.cleanstream stable
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: com.obs.Studio.Plugin.backgroundremoval-${{ steps.setup.outputs.commitHash }}.flatpak
-          path: com.obs.Studio.Plugin.backgroundremoval-${{ steps.setup.outputs.commitHash }}.flatpak
+          name: com.obs.Studio.Plugin.cleanstream-${{ steps.setup.outputs.commitHash }}.flatpak
+          path: com.obs.Studio.Plugin.cleanstream-${{ steps.setup.outputs.commitHash }}.flatpak
