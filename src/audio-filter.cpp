@@ -169,7 +169,7 @@ static void run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
        float(pcm32f_size) / WHISPER_SAMPLE_RATE, gf->whisper_params.n_threads);
 
   // run the inference
-  if (whisper_full(gf->whisper_context, gf->whisper_params, pcm32f_data, pcm32f_size) != 0) {
+  if (whisper_full(gf->whisper_context, gf->whisper_params, pcm32f_data, (int)pcm32f_size) != 0) {
     warn("failed to process audio");
   } else {
     const int n_segments = whisper_full_n_segments(gf->whisper_context);
@@ -256,8 +256,8 @@ struct obs_source_info my_audio_filter_info = {
   .get_name = cleanstream_name,
   .create = cleanstream_create,
   .destroy = cleanstream_destroy,
-  .update = cleanstream_update,
-  .filter_audio = cleanstream_filter_audio,
   .get_defaults = cleanstream_defaults,
   .get_properties = cleanstream_properties,
+  .update = cleanstream_update,
+  .filter_audio = cleanstream_filter_audio,
 };
