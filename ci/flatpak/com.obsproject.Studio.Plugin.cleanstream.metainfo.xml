@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>com.obsproject.Studio.Plugin.cleanstream</id>
+  <extends>com.obsproject.Studio</extends>
+  <name>obs-cleanstream Plugin</name>
+  <summary> An OBS plugin to remove unwanted words and utterances from live audio using AI.</summary>
+  <url type="homepage">https://github.com/royshil/obs-cleanstream</url>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-2.0</project_license>
+</component>

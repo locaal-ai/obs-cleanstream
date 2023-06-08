@@ -1,0 +1,33 @@
+# build into folder "build-dir":
+# $ flatpak-builder build-dir com.obsproject.Studio.Plugin.cleanstream.yaml --force-clean
+#
+# install:
+# $ flatpak-builder --user --install --force-clean build-dir com.obsproject.Studio.Plugin.cleanstream.yaml
+id: com.obsproject.Studio.Plugin.cleanstream
+runtime: com.obsproject.Studio
+runtime-version: stable
+sdk: org.kde.Sdk/x86_64/6.4
+build-extension: true
+separate-locales: false
+appstream-compose: false
+build-options:
+  prefix: /app/plugins/cleanstream
+modules:
+  - name: obs-cleanstream
+    buildsystem: cmake
+    builddir: true
+    config-opts:
+      - -DLIBOBS_INCLUDE_DIR=/app/include/obs
+    sources:
+      - type: git
+        url: https://github.com/royshil/obs-cleanstream.git
+        tag: v0.0.1
+        commit: dummyshatobereplaced
+  - name: appdata
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 --target-directory=${FLATPAK_DEST}/share/metainfo ${FLATPAK_ID}.metainfo.xml
+      - appstream-compose --basename=${FLATPAK_ID} --prefix=${FLATPAK_DEST} --origin=flatpak ${FLATPAK_ID}
+    sources:
+      - type: file
+        path: com.obsproject.Studio.Plugin.cleanstream.metainfo.xml

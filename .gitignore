@@ -1,0 +1,5 @@
+build_x86_64
+
+.DS_Store
+
+*.generated.*
