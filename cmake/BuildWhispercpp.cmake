@@ -8,6 +8,11 @@ else()
   set(Whispercpp_BUILD_TYPE Debug)
 endif()
 
+# On linux add the `-fPIC` flag to the compiler
+if(UNIX AND NOT APPLE)
+  set(WHISPER_EXTRA_CXX_FLAGS "-fPIC")
+endif()
+
 ExternalProject_Add(
   Whispercpp_Build
   DOWNLOAD_EXTRACT_TIMESTAMP true
@@ -22,6 +27,7 @@ ExternalProject_Add(
              -DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
              -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
              -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES_}
+             -DCMAKE_CXX_FLAGS=${WHISPER_EXTRA_CXX_FLAGS}
              -DBUILD_SHARED_LIBS=OFF
              -DWHISPER_BUILD_TESTS=OFF
              -DWHISPER_BUILD_EXAMPLES=OFF
