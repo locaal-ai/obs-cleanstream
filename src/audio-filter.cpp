@@ -43,8 +43,8 @@ struct cleanstream_audio_info {
 
 struct cleanstream_data {
   obs_source_t *context; // obs input source
-  size_t channels; // number of channels
-  uint32_t sample_rate; // input sample rate
+  size_t channels;       // number of channels
+  uint32_t sample_rate;  // input sample rate
   // How many input frames (in input sample rate) are needed for the next whisper frame
   size_t frames;
   // How many ms/frames are needed to overlap with the next whisper frame
@@ -69,8 +69,10 @@ struct cleanstream_data {
   std::thread whisper_thread;
 
   /* output data */
-	struct obs_audio_data output_audio;
-	DARRAY(float) output_data;
+  struct obs_audio_data output_audio;
+  DARRAY(float) output_data;
+
+  float filler_p_threshold;
 };
 
 std::mutex whisper_buf_mutex;
@@ -118,8 +120,8 @@ bool vad_simple(float *pcmf32, size_t pcm32f_size, int sample_rate, int last_ms,
   energy_all /= n_samples;
 
   if (verbose) {
-    blog(LOG_INFO, "%s: energy_all: %f, vad_thold: %f, freq_thold: %f\n",
-            __func__, energy_all, vad_thold, freq_thold);
+    blog(LOG_INFO, "%s: energy_all: %f, vad_thold: %f, freq_thold: %f\n", __func__, energy_all,
+         vad_thold, freq_thold);
   }
 
   if (energy_all < vad_thold) {
@@ -130,7 +132,8 @@ bool vad_simple(float *pcmf32, size_t pcm32f_size, int sample_rate, int last_ms,
 }
 
 // Find the first word boundary by looking for a dip in energy
-size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, int sample_rate, float thold, bool verbose)
+size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, int sample_rate, float thold,
+                            bool verbose)
 {
   const uint64_t n_samples = pcm32f_size;
 
@@ -199,9 +202,9 @@ static void cleanstream_destroy(void *data)
       circlebuf_free(&gf->output_buffers[i]);
     }
   }
-	circlebuf_free(&gf->info_buffer);
-	circlebuf_free(&gf->info_out_buffer);
-	da_free(gf->output_data);
+  circlebuf_free(&gf->info_buffer);
+  circlebuf_free(&gf->info_out_buffer);
+  da_free(gf->output_data);
 
   bfree(gf);
 }
@@ -232,7 +235,6 @@ static inline enum speaker_layout convert_speaker_layout(uint8_t channels)
 
 static void cleanstream_update(void *data, obs_data_t *s)
 {
-  UNUSED_PARAMETER(s);
   struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
   // Get the number of channels for the input source
   gf->channels = audio_output_get_channels(obs_get_audio());
@@ -243,6 +245,8 @@ static void cleanstream_update(void *data, obs_data_t *s)
   gf->overlap_frames = (size_t)(gf->sample_rate / (1000.0f / gf->overlap_ms));
   info("cleanstream_update. channels %d, frames %d, sample_rate %d", (int)gf->channels,
        (int)gf->frames, gf->sample_rate);
+
+  gf->filler_p_threshold = obs_data_get_double(s, "filler_p_threshold");
 
   struct resample_info src, dst;
   src.samples_per_sec = gf->sample_rate;
@@ -281,7 +285,8 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   gf->whisper_params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
   gf->whisper_params.n_threads = std::min(8, (int32_t)std::thread::hardware_concurrency());
   gf->whisper_params.duration_ms = BUFFER_SIZE_MSEC;
-  gf->whisper_params.initial_prompt = "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm,";
+  gf->whisper_params.initial_prompt =
+    "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm,";
   gf->whisper_params.print_progress = false;
   gf->whisper_params.print_realtime = false;
   gf->whisper_params.token_timestamps = false;
@@ -326,7 +331,7 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
     float sentence_p = 0.0f;
     const int n_tokens = whisper_full_n_tokens(gf->whisper_context, n_segment);
     for (int j = 0; j < n_tokens; ++j) {
-        sentence_p += whisper_full_get_token_p(gf->whisper_context, n_segment, j);
+      sentence_p += whisper_full_get_token_p(gf->whisper_context, n_segment, j);
     }
     sentence_p /= (float)n_tokens;
 
@@ -337,7 +342,7 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
     info("[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(), to_timestamp(t1).c_str(), sentence_p,
          text_lower.c_str());
 
-    if ((text_lower.find("[bl") != std::string::npos && sentence_p > 0.8f) ||
+    if ((text_lower.find("[bl") != std::string::npos && sentence_p > gf->filler_p_threshold) ||
         text_lower.find("uh,") != std::string::npos ||
         text_lower.find("um,") != std::string::npos ||
         text_lower.find("um.") != std::string::npos ||
@@ -400,14 +405,16 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
       }
       if (total_frames_from_infos >= (gf->frames - gf->overlap_frames)) {
         // push the last info back into the buffer
-        circlebuf_push_back(&gf->info_buffer, &info_from_buf, sizeof(struct cleanstream_audio_info));
+        circlebuf_push_back(&gf->info_buffer, &info_from_buf,
+                            sizeof(struct cleanstream_audio_info));
         total_frames_from_infos -= info_from_buf.frames;
         break;
       }
     }
 
-    debug("processing %d frames (%d ms), start timestamp %" PRIu64 " ", (int)total_frames_from_infos,
-          (int)(total_frames_from_infos * 1000 / gf->sample_rate), start_timestamp);
+    debug("processing %d frames (%d ms), start timestamp %" PRIu64 " ",
+          (int)total_frames_from_infos, (int)(total_frames_from_infos * 1000 / gf->sample_rate),
+          start_timestamp);
 
     /* Pop from input circlebuf */
     for (size_t c = 0; c < gf->channels; c++) {
@@ -442,20 +449,22 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
       filler_segment = true;
     }
   } else {
-    info("silence detected, skipping inference");
+    debug("silence detected, skipping inference");
     skipped_inference = true;
   }
 
   const uint32_t total_frames_from_infos_ms =
-      total_frames_from_infos * 1000 / gf->sample_rate;  // number of frames in this packet
+    total_frames_from_infos * 1000 / gf->sample_rate; // number of frames in this packet
 
   if (filler_segment) {
-    // find word boundary
+    // this is a filler segment, reduce the output volume
+
+    // find first word boundary
     const size_t first_boundary = word_boundary_simple(gf->copy_buffers[0], total_frames_from_infos,
                                                        gf->sample_rate, 0.1, false);
 
-    info("filler segment, reducing volume on frames %lu -> %u", first_boundary, total_frames_from_infos);
-    // this is a filler segment, reduce the output volume for the first gf->overlap_frames
+    info("filler segment, reducing volume on frames %lu -> %u", first_boundary,
+         total_frames_from_infos);
     for (size_t c = 0; c < gf->channels; c++) {
       for (size_t i = first_boundary; i < total_frames_from_infos; i++) {
         gf->copy_buffers[c][i] = 0;
@@ -467,8 +476,8 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
     std::lock_guard<std::mutex> lock(whisper_outbuf_mutex);
 
     struct cleanstream_audio_info info_out = {0};
-    info_out.frames = total_frames_from_infos;  // number of frames in this packet
-    info_out.timestamp = start_timestamp;       // timestamp of this packet
+    info_out.frames = total_frames_from_infos; // number of frames in this packet
+    info_out.timestamp = start_timestamp;      // timestamp of this packet
     circlebuf_push_back(&gf->info_out_buffer, &info_out, sizeof(info_out));
 
     for (size_t c = 0; c < gf->channels; c++) {
@@ -480,17 +489,18 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   // end of timer
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-  info("audio processing of %u ms new data took %d ms", total_frames_from_infos_ms, (int)duration);
+  debug("audio processing of %u ms new data took %d ms", total_frames_from_infos_ms, (int)duration);
 
   if (duration > total_frames_from_infos_ms) {
     gf->overlap_ms -= 10;
     gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
-    warn("audio processing took too long (%d ms), reducing overlap to %lu ms",
-         (int)duration, gf->overlap_ms);
+    debug("audio processing took too long (%d ms), reducing overlap to %lu ms", (int)duration,
+          gf->overlap_ms);
   } else if (!skipped_inference) {
     gf->overlap_ms += 10;
     gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
-    info("audio processing took %d ms, increasing overlap to %lu ms", (int)duration, gf->overlap_ms);
+    debug("audio processing took %d ms, increasing overlap to %lu ms", (int)duration,
+          gf->overlap_ms);
   }
 }
 
@@ -532,7 +542,8 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
     /* -----------------------------------------------
      * pop from output buffers to get audio packet info */
     circlebuf_pop_front(&gf->info_out_buffer, &info_out, sizeof(info_out));
-    info("audio packet info: timestamp=%" PRIu64 ", frames=%u", info_out.timestamp, info_out.frames);
+    info("audio packet info: timestamp=%" PRIu64 ", frames=%u", info_out.timestamp,
+         info_out.frames);
 
     /* -----------------------------------------------
     * pop from output circlebuf to audio data */
@@ -540,7 +551,8 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
     for (size_t i = 0; i < gf->channels; i++) {
       gf->output_audio.data[i] = (uint8_t *)&gf->output_data.array[i * info_out.frames];
-      circlebuf_pop_front(&gf->output_buffers[i], gf->output_audio.data[i], info_out.frames * sizeof(float));
+      circlebuf_pop_front(&gf->output_buffers[i], gf->output_audio.data[i],
+                          info_out.frames * sizeof(float));
     }
   }
 
@@ -551,12 +563,16 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
 static void cleanstream_defaults(obs_data_t *s)
 {
-  UNUSED_PARAMETER(s);
+  obs_data_set_default_double(s, "filler_p_threshold", 0.75);
 }
 
 static obs_properties_t *cleanstream_properties(void *data)
 {
   obs_properties_t *ppts = obs_properties_create();
+
+	obs_properties_add_float_slider(ppts, "filler_p_threshold",
+					"filler_p_threshold", 0.0f, 1.0f,
+					0.01f);
 
   UNUSED_PARAMETER(data);
   return ppts;
