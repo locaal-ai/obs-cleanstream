@@ -23,10 +23,10 @@
 
 // buffer size in msec
 #define BUFFER_SIZE_MSEC 1010
-// at 16Khz, 1001 msec is 16016 frames
+// at 16Khz, 1010 msec is 16160 frames
 #define WHISPER_FRAME_SIZE 16160
 // overlap in msec
-#define OVERLAP_SIZE_MSEC 300
+#define OVERLAP_SIZE_MSEC 340
 
 #define VAD_THOLD 0.0001f
 #define FREQ_THOLD 100.0f
@@ -47,8 +47,9 @@ struct cleanstream_data {
   uint32_t sample_rate; // input sample rate
   // How many input frames (in input sample rate) are needed for the next whisper frame
   size_t frames;
-  // How many frames are needed to overlap with the next whisper frame
+  // How many ms/frames are needed to overlap with the next whisper frame
   size_t overlap_frames;
+  size_t overlap_ms;
 
   /* PCM buffers */
   float *copy_buffers[MAX_PREPROC_CHANNELS];
@@ -128,6 +129,43 @@ bool vad_simple(float *pcmf32, size_t pcm32f_size, int sample_rate, int last_ms,
   return true;
 }
 
+// Find the first word boundary by looking for a dip in energy
+size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, int sample_rate, float thold, bool verbose)
+{
+  const uint64_t n_samples = pcm32f_size;
+
+  // scan the buffer with a window of 10ms
+  const uint64_t n_samples_window = (sample_rate * 10) / 1000;
+
+  float first_window_energy = 0.0f;
+
+  for (uint64_t window_i = 0; window_i < n_samples; window_i += n_samples_window) {
+    float energy_in_window = 0.0f;
+
+    for (uint64_t j = 0; j < n_samples_window; j++) {
+      energy_in_window += fabsf(pcmf32[window_i + j]);
+    }
+
+    energy_in_window /= n_samples_window;
+
+    if (window_i == 0) {
+      first_window_energy = energy_in_window;
+    }
+
+    if (verbose)
+      blog(LOG_INFO, "%s: energy_in_window %llu: %f", __func__, window_i, energy_in_window);
+
+    if (energy_in_window < thold * first_window_energy) {
+      if (verbose)
+        blog(LOG_INFO, "%s: found window with < %.1f the first window energy %.3f", __func__, thold,
+             first_window_energy);
+      return (float)window_i;
+    }
+  }
+
+  return 0;
+}
+
 static const char *cleanstream_name(void *unused)
 {
   UNUSED_PARAMETER(unused);
@@ -201,7 +239,8 @@ static void cleanstream_update(void *data, obs_data_t *s)
 
   gf->sample_rate = audio_output_get_sample_rate(obs_get_audio());
   gf->frames = (size_t)(gf->sample_rate / (1000.0f / BUFFER_SIZE_MSEC));
-  gf->overlap_frames = (size_t)(gf->sample_rate / (1000.0f / OVERLAP_SIZE_MSEC));
+  gf->overlap_ms = OVERLAP_SIZE_MSEC;
+  gf->overlap_frames = (size_t)(gf->sample_rate / (1000.0f / gf->overlap_ms));
   info("cleanstream_update. channels %d, frames %d, sample_rate %d", (int)gf->channels,
        (int)gf->frames, gf->sample_rate);
 
@@ -249,7 +288,7 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   gf->whisper_params.single_segment = true;
   gf->whisper_params.suppress_non_speech_tokens = false;
   gf->whisper_params.suppress_blank = true;
-  gf->whisper_params.max_tokens = 5;
+  gf->whisper_params.max_tokens = 3;
 
   cleanstream_update(gf, settings);
   return gf;
@@ -291,17 +330,18 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
     }
     sentence_p /= (float)n_tokens;
 
-    // if text (convert to lowercase) contains `[blank_aud` or `uh,` or `uh...` then we have a
+    // if text (convert to lowercase) contains `[blank` or `uh,` or `uh...` then we have a
     // blank segment
     std::string text_lower(text);
     std::transform(text_lower.begin(), text_lower.end(), text_lower.begin(), ::tolower);
     info("[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(), to_timestamp(t1).c_str(), sentence_p,
          text_lower.c_str());
 
-    if ((text_lower.find("[blank_aud") != std::string::npos && sentence_p > 0.85f) ||
+    if ((text_lower.find("[bl") != std::string::npos && sentence_p > 0.8f) ||
         text_lower.find("uh,") != std::string::npos ||
         text_lower.find("um,") != std::string::npos ||
-        text_lower.find("uh...") != std::string::npos) {
+        text_lower.find("um.") != std::string::npos ||
+        text_lower.find("uh.") != std::string::npos) {
       return true;
     }
   }
@@ -394,6 +434,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
         (float)out_frames / WHISPER_SAMPLE_RATE * 1000.0f);
 
   bool filler_segment = false;
+  bool skipped_inference = false;
 
   if (::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, 300, VAD_THOLD, FREQ_THOLD, false)) {
     // run the inference, this is a long blocking call
@@ -402,13 +443,21 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
     }
   } else {
     info("silence detected, skipping inference");
+    skipped_inference = true;
   }
 
+  const uint32_t total_frames_from_infos_ms =
+      total_frames_from_infos * 1000 / gf->sample_rate;  // number of frames in this packet
+
   if (filler_segment) {
-    info("filler segment, reducing volume");
+    // find word boundary
+    const size_t first_boundary = word_boundary_simple(gf->copy_buffers[0], total_frames_from_infos,
+                                                       gf->sample_rate, 0.1, false);
+
+    info("filler segment, reducing volume on frames %lu -> %u", first_boundary, total_frames_from_infos);
     // this is a filler segment, reduce the output volume for the first gf->overlap_frames
     for (size_t c = 0; c < gf->channels; c++) {
-      for (size_t i = 0; i < total_frames_from_infos; i++) {
+      for (size_t i = first_boundary; i < total_frames_from_infos; i++) {
         gf->copy_buffers[c][i] = 0;
       }
     }
@@ -431,16 +480,18 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   // end of timer
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-  debug("audio processing took %d ms", (int)duration);
+  info("audio processing of %u ms new data took %d ms", total_frames_from_infos_ms, (int)duration);
 
-  // if (duration > BUFFER_SIZE_MSEC) {
-  //   std::lock_guard<std::mutex> lock(whisper_buf_mutex);
-  //   warn("audio processing took too long (%d ms), clearing the buffer", (int)duration);
-  //   // clear the buffer
-  //   for (size_t c = 0; c < gf->channels; c++) {
-  //     circlebuf_pop_front(&gf->input_buffers[c], NULL, gf->input_buffers[c].size);
-  //   }
-  // }
+  if (duration > total_frames_from_infos_ms) {
+    gf->overlap_ms -= 10;
+    gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
+    warn("audio processing took too long (%d ms), reducing overlap to %lu ms",
+         (int)duration, gf->overlap_ms);
+  } else if (!skipped_inference) {
+    gf->overlap_ms += 10;
+    gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
+    info("audio processing took %d ms, increasing overlap to %lu ms", (int)duration, gf->overlap_ms);
+  }
 }
 
 static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_data *audio)
@@ -469,6 +520,7 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
     circlebuf_push_back(&gf->info_buffer, &info, sizeof(info));
   }
 
+  // Check for output to play
   struct cleanstream_audio_info info_out = {0};
   {
     std::lock_guard<std::mutex> lock(whisper_outbuf_mutex); // scoped lock
@@ -477,6 +529,8 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
       return NULL;
     }
 
+    /* -----------------------------------------------
+     * pop from output buffers to get audio packet info */
     circlebuf_pop_front(&gf->info_out_buffer, &info_out, sizeof(info_out));
     info("audio packet info: timestamp=%" PRIu64 ", frames=%u", info_out.timestamp, info_out.frames);
 
@@ -497,16 +551,12 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
 static void cleanstream_defaults(obs_data_t *s)
 {
-  obs_data_set_default_double(s, S_cleanstream_DB, 0.0f);
+  UNUSED_PARAMETER(s);
 }
 
 static obs_properties_t *cleanstream_properties(void *data)
 {
   obs_properties_t *ppts = obs_properties_create();
-
-  obs_property_t *p =
-    obs_properties_add_float_slider(ppts, S_cleanstream_DB, MT_("gain"), -30.0, 30.0, 0.1);
-  obs_property_float_set_suffix(p, " dB");
 
   UNUSED_PARAMETER(data);
   return ppts;
