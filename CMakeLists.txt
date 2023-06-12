@@ -16,9 +16,8 @@ set(LINUX_MAINTAINER_EMAIL "roy.shil@gmail.com")
 include(cmake/BuildWhispercpp.cmake)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Whispercpp)
 
-target_sources(
-  ${CMAKE_PROJECT_NAME}
-  PRIVATE src/plugin-main.cpp src/audio-filter.cpp)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp
+                                             src/audio-filter.cpp)
 
 # Import libobs as main plugin dependency
 find_package(libobs REQUIRED)
@@ -28,7 +27,8 @@ include(cmake/ObsPluginHelpers.cmake)
 find_package(obs-frontend-api REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::obs-frontend-api)
 
-configure_file(src/plugin-macros.h.in ${CMAKE_SOURCE_DIR}/src/plugin-macros.generated.h)
+configure_file(src/plugin-macros.h.in
+               ${CMAKE_SOURCE_DIR}/src/plugin-macros.generated.h)
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-macros.generated.h)
 
@@ -42,7 +42,8 @@ endif()
 
 # --- Platform-independent build settings ---
 
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(${CMAKE_PROJECT_NAME}
+                           PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
 
@@ -53,8 +54,10 @@ if(OS_WINDOWS)
   configure_file(cmake/bundle/windows/installer-Windows.iss.in
                  ${CMAKE_BINARY_DIR}/installer-Windows.generated.iss)
 
-  configure_file(cmake/bundle/windows/resource.rc.in ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.rc)
-  target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.rc)
+  configure_file(cmake/bundle/windows/resource.rc.in
+                 ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.rc)
+  target_sources(${CMAKE_PROJECT_NAME}
+                 PRIVATE ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.rc)
 
   if(MSVC)
     target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE /W4)

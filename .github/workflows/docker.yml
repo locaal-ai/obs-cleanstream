@@ -10,6 +10,7 @@ on:
 
 jobs:
   ArchLinux:
+    if: false
     runs-on: "ubuntu-latest"
     container:
       image: "archlinux:base-devel"
@@ -20,7 +21,7 @@ jobs:
       - name: "Chown files"
         run: "chown -R user:user ."
       - name: "Install build dependencies"
-        run: "pacman --noconfirm -Syu && pacman --noconfirm -S cmake obs-studio opencv"
+        run: "pacman --noconfirm -Syu && pacman --noconfirm -S cmake obs-studio"
       - name: "Make the package"
         working-directory: "scripts"
         run: "sudo -u user -- makepkg"

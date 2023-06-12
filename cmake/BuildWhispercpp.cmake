@@ -1,8 +1,10 @@
 include(ExternalProject)
 
-string(REPLACE ";" "$<SEMICOLON>" CMAKE_OSX_ARCHITECTURES_ "${CMAKE_OSX_ARCHITECTURES}")
+string(REPLACE ";" "$<SEMICOLON>" CMAKE_OSX_ARCHITECTURES_
+               "${CMAKE_OSX_ARCHITECTURES}")
 
-if(${CMAKE_BUILD_TYPE} STREQUAL Release OR ${CMAKE_BUILD_TYPE} STREQUAL RelWithDebInfo)
+if(${CMAKE_BUILD_TYPE} STREQUAL Release OR ${CMAKE_BUILD_TYPE} STREQUAL
+                                           RelWithDebInfo)
   set(Whispercpp_BUILD_TYPE Release)
 else()
   set(Whispercpp_BUILD_TYPE Debug)
@@ -17,11 +19,13 @@ ExternalProject_Add(
   Whispercpp_Build
   DOWNLOAD_EXTRACT_TIMESTAMP true
   URL https://github.com/ggerganov/whisper.cpp/archive/refs/tags/v1.4.0.tar.gz
-  BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config ${Whispercpp_BUILD_TYPE}
+  BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config
+                ${Whispercpp_BUILD_TYPE}
   BUILD_BYPRODUCTS
     <INSTALL_DIR>/lib/static/${CMAKE_STATIC_LIBRARY_PREFIX}whisper${CMAKE_STATIC_LIBRARY_SUFFIX}
   CMAKE_GENERATOR ${CMAKE_GENERATOR}
-  INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config ${Whispercpp_BUILD_TYPE}
+  INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config
+                  ${Whispercpp_BUILD_TYPE}
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
              -DCMAKE_BUILD_TYPE=${Whispercpp_BUILD_TYPE}
              -DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
@@ -30,8 +34,7 @@ ExternalProject_Add(
              -DCMAKE_CXX_FLAGS=${WHISPER_EXTRA_CXX_FLAGS}
              -DBUILD_SHARED_LIBS=OFF
              -DWHISPER_BUILD_TESTS=OFF
-             -DWHISPER_BUILD_EXAMPLES=OFF
-             )
+             -DWHISPER_BUILD_EXAMPLES=OFF)
 
 ExternalProject_Get_Property(Whispercpp_Build INSTALL_DIR)
 
@@ -46,8 +49,9 @@ set_target_properties(
 add_library(Whispercpp INTERFACE)
 add_dependencies(Whispercpp Whispercpp_Build)
 target_link_libraries(Whispercpp INTERFACE Whispercpp::Whisper)
-set_target_properties(Whispercpp::Whisper PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
-                                                              ${INSTALL_DIR}/include)
+set_target_properties(
+  Whispercpp::Whisper PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
+                                 ${INSTALL_DIR}/include)
 if(APPLE)
   target_link_libraries(Whispercpp INTERFACE "-framework Accelerate")
 endif(APPLE)
