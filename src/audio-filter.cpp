@@ -151,7 +151,8 @@ size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, uint32_t sa
     }
 
     if (verbose)
-      blog(LOG_INFO, "%s: energy_in_window %llu: %f", __func__, window_i, energy_in_window);
+      blog(LOG_INFO, "%s: energy_in_window %lu: %f", __func__, (unsigned long)window_i,
+           energy_in_window);
 
     if (energy_in_window < thold * first_window_energy) {
       if (verbose)
