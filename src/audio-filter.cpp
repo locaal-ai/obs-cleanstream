@@ -9,6 +9,7 @@
 #include <thread>
 #include <mutex>
 #include <cinttypes>
+#include <algorithm>
 
 #include <whisper.h>
 
@@ -81,10 +82,10 @@ std::mutex whisper_ctx_mutex;
 
 static void whisper_loop(void *data);
 
-void high_pass_filter(float *pcmf32, size_t pcm32f_size, float cutoff, float sample_rate)
+void high_pass_filter(float *pcmf32, size_t pcm32f_size, float cutoff, uint32_t sample_rate)
 {
   const float rc = 1.0f / (2.0f * M_PI * cutoff);
-  const float dt = 1.0f / sample_rate;
+  const float dt = 1.0f / (float)sample_rate;
   const float alpha = dt / (rc + dt);
 
   float y = pcmf32[0];
@@ -96,16 +97,10 @@ void high_pass_filter(float *pcmf32, size_t pcm32f_size, float cutoff, float sam
 }
 
 // VAD (voice activity detection), return true if speech detected
-bool vad_simple(float *pcmf32, size_t pcm32f_size, int sample_rate, int last_ms, float vad_thold,
+bool vad_simple(float *pcmf32, size_t pcm32f_size, uint32_t sample_rate, float vad_thold,
                 float freq_thold, bool verbose)
 {
   const uint64_t n_samples = pcm32f_size;
-  const uint64_t n_samples_last = (sample_rate * last_ms) / 1000;
-
-  if (n_samples_last >= n_samples) {
-    // not enough samples - assume no speech
-    return false;
-  }
 
   if (freq_thold > 0.0f) {
     high_pass_filter(pcmf32, pcm32f_size, freq_thold, sample_rate);
@@ -132,8 +127,8 @@ bool vad_simple(float *pcmf32, size_t pcm32f_size, int sample_rate, int last_ms,
 }
 
 // Find the first word boundary by looking for a dip in energy
-size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, int sample_rate, float thold,
-                            bool verbose)
+size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, uint32_t sample_rate,
+                            float thold, bool verbose)
 {
   const uint64_t n_samples = pcm32f_size;
 
@@ -162,7 +157,7 @@ size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, int sample_
       if (verbose)
         blog(LOG_INFO, "%s: found window with < %.1f the first window energy %.3f", __func__, thold,
              first_window_energy);
-      return (float)window_i;
+      return window_i;
     }
   }
 
@@ -246,7 +241,7 @@ static void cleanstream_update(void *data, obs_data_t *s)
   info("cleanstream_update. channels %d, frames %d, sample_rate %d", (int)gf->channels,
        (int)gf->frames, gf->sample_rate);
 
-  gf->filler_p_threshold = obs_data_get_double(s, "filler_p_threshold");
+  gf->filler_p_threshold = (float)obs_data_get_double(s, "filler_p_threshold");
 
   struct resample_info src, dst;
   src.samples_per_sec = gf->sample_rate;
@@ -443,7 +438,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   bool filler_segment = false;
   bool skipped_inference = false;
 
-  if (::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, 300, VAD_THOLD, FREQ_THOLD, false)) {
+  if (::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, VAD_THOLD, FREQ_THOLD, false)) {
     // run the inference, this is a long blocking call
     if (run_whisper_inference(gf, output[0], out_frames)) {
       filler_segment = true;
@@ -461,7 +456,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
 
     // find first word boundary
     const size_t first_boundary = word_boundary_simple(gf->copy_buffers[0], total_frames_from_infos,
-                                                       gf->sample_rate, 0.1, false);
+                                                       gf->sample_rate, 0.1f, false);
 
     info("filler segment, reducing volume on frames %lu -> %u", first_boundary,
          total_frames_from_infos);
@@ -570,9 +565,8 @@ static obs_properties_t *cleanstream_properties(void *data)
 {
   obs_properties_t *ppts = obs_properties_create();
 
-	obs_properties_add_float_slider(ppts, "filler_p_threshold",
-					"filler_p_threshold", 0.0f, 1.0f,
-					0.01f);
+  obs_properties_add_float_slider(ppts, "filler_p_threshold", "filler_p_threshold", 0.0f, 1.0f,
+                                  0.01f);
 
   UNUSED_PARAMETER(data);
   return ppts;
