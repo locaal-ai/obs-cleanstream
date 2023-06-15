@@ -14,8 +14,9 @@
 #include <whisper.h>
 
 #define do_log(level, format, ...) \
-  blog(level, "[cleanstream filter: '%s'] " format, obs_source_get_name(gf->context), ##__VA_ARGS__)
+  blog(level, "[cleanstream filter: '%s'] " format, __func__, ##__VA_ARGS__)
 
+#define error(format, ...) do_log(LOG_ERROR, format, ##__VA_ARGS__)
 #define warn(format, ...) do_log(LOG_WARNING, format, ##__VA_ARGS__)
 #define info(format, ...) do_log(LOG_INFO, format, ##__VA_ARGS__)
 #define debug(format, ...) do_log(LOG_DEBUG, format, ##__VA_ARGS__)
@@ -127,42 +128,56 @@ bool vad_simple(float *pcmf32, size_t pcm32f_size, uint32_t sample_rate, float v
 }
 
 // Find the first word boundary by looking for a dip in energy
-size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, uint32_t sample_rate,
-                            float thold, bool verbose)
+size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, size_t last_sample,
+                            uint32_t sample_rate, float thold, bool verbose)
 {
-  const uint64_t n_samples = pcm32f_size;
+  UNUSED_PARAMETER(pcm32f_size);
 
-  // scan the buffer with a window of 10ms
-  const uint64_t n_samples_window = (sample_rate * 10) / 1000;
+  // scan the buffer with a window of 50ms
+  const uint64_t n_samples_window = (sample_rate * 50) / 1000;
 
   float first_window_energy = 0.0f;
 
-  for (uint64_t window_i = 0; window_i < n_samples; window_i += n_samples_window) {
-    float energy_in_window = 0.0f;
+  uint64_t start_marker = 0;
 
+  for (uint64_t window_i = 0; window_i < last_sample; window_i += n_samples_window) {
+    float energy_in_window = 0.0f;
     for (uint64_t j = 0; j < n_samples_window; j++) {
       energy_in_window += fabsf(pcmf32[window_i + j]);
     }
-
     energy_in_window /= n_samples_window;
 
     if (window_i == 0) {
       first_window_energy = energy_in_window;
     }
 
-    if (verbose) {
-      blog(LOG_DEBUG, "%s: energy_in_window %lu: %f", __func__, (unsigned long)window_i,
-           energy_in_window);
+    if (energy_in_window < thold * first_window_energy) {
+      start_marker = window_i;
+      break;
+    }
+  }
+  for (uint64_t window_i = last_sample; window_i > 0; window_i -= n_samples_window) {
+    float energy_in_window = 0.0f;
+    for (uint64_t j = 0; j < n_samples_window; j++) {
+      energy_in_window += fabsf(pcmf32[window_i + j]);
+    }
+    energy_in_window /= n_samples_window;
+
+    if (window_i == 0) {
+      first_window_energy = energy_in_window;
     }
 
     if (energy_in_window < thold * first_window_energy) {
-      if (verbose) {
-        blog(LOG_DEBUG, "%s: found window with < %.1f the first window energy %.3f", __func__,
-             thold, first_window_energy);
-      }
-      return window_i;
+      end_marker = window_i;
+      break;
     }
   }
+
+
+    if (verbose) {
+      blog(LOG_INFO, "%s: energy_in_window %lu: %f", __func__, (unsigned long)window_i,
+           energy_in_window);
+    }
 
   return 0;
 }
@@ -177,6 +192,7 @@ static void cleanstream_destroy(void *data)
 {
   struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
 
+  info("cleanstream_destroy");
   {
     std::lock_guard<std::mutex> lock(whisper_ctx_mutex);
     if (gf->whisper_context != nullptr) {
@@ -283,7 +299,7 @@ static void cleanstream_update(void *data, obs_data_t *s)
 
     size_t frames_size_in_bytes = gf->frames * sizeof(float);
     info("CleanStream filter: allocate buffers, frames %lu, size %lu", gf->frames,
-         frames_size_in_bytes); 
+         frames_size_in_bytes);
     gf->copy_buffers[0] = static_cast<float *>(bmalloc(gf->channels * frames_size_in_bytes));
     for (size_t c = 1; c < gf->channels; c++) {
       gf->copy_buffers[c] = gf->copy_buffers[c - 1] + gf->frames;
@@ -296,6 +312,15 @@ static void cleanstream_update(void *data, obs_data_t *s)
   }
 }
 
+static struct whisper_context * init_whisper_context() {
+  struct whisper_context *ctx = whisper_init_from_file(obs_module_file("models/ggml-tiny.en.bin"));
+  if (ctx == nullptr) {
+    error("Failed to load whisper model");
+    return nullptr;
+  }
+  return ctx;
+}
+
 static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 {
   struct cleanstream_data *gf =
@@ -305,15 +330,21 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
     circlebuf_init(&gf->input_buffers[i]);
     circlebuf_init(&gf->output_buffers[i]);
   }
+  circlebuf_init(&gf->info_buffer);
+  circlebuf_init(&gf->info_out_buffer);
 
   gf->context = filter;
-  gf->whisper_context = whisper_init_from_file(obs_module_file("models/ggml-tiny.en.bin"));
+  gf->whisper_context = init_whisper_context();
+  if (gf->whisper_context == nullptr) {
+    error("Failed to load whisper model");
+    return nullptr;
+  }
 
   gf->whisper_params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
   gf->whisper_params.n_threads = std::min(8, (int32_t)std::thread::hardware_concurrency());
   gf->whisper_params.duration_ms = BUFFER_SIZE_MSEC;
   gf->whisper_params.initial_prompt =
-    "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm,";
+    "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,";
   gf->whisper_params.print_progress = false;
   gf->whisper_params.print_realtime = false;
   gf->whisper_params.token_timestamps = false;
@@ -346,13 +377,27 @@ static std::string to_timestamp(int64_t t)
 static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
                                   size_t pcm32f_size)
 {
-  info("%s: processing %d samples, %.3f sec), %d threads", __func__, int(pcm32f_size),
+  info("%s: processing %d samples, %.3f sec, %d threads", __func__, int(pcm32f_size),
         float(pcm32f_size) / WHISPER_SAMPLE_RATE, gf->whisper_params.n_threads);
 
   std::lock_guard<std::mutex> lock(whisper_ctx_mutex);
+  if (gf->whisper_context == nullptr) {
+    warn("whisper context is null");
+    return false;
+  }
+
   // run the inference
-  if (whisper_full(gf->whisper_context, gf->whisper_params, pcm32f_data, (int)pcm32f_size) != 0) {
-    warn("failed to process audio");
+  int whisper_full_result = -1;
+  try {
+    whisper_full_result = whisper_full(gf->whisper_context, gf->whisper_params, pcm32f_data, (int)pcm32f_size);
+  } catch (const std::exception &e) {
+    error("Whisper exception: %s. Filter restart is required", e.what());
+    whisper_free(gf->whisper_context);
+    gf->whisper_context = nullptr;
+  }
+
+  if (whisper_full_result != 0) {
+    warn("failed to process audio, error %d", whisper_full_result);
   } else {
     const int n_segment = 0;
     const char *text = whisper_full_get_segment_text(gf->whisper_context, n_segment);
@@ -377,6 +422,10 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
         text_lower.find("uh,") != std::string::npos ||
         text_lower.find("um,") != std::string::npos ||
         text_lower.find("um.") != std::string::npos ||
+        text_lower.find("ah.") != std::string::npos ||
+        text_lower.find("ah,") != std::string::npos ||
+        text_lower.find("eh.") != std::string::npos ||
+        text_lower.find("eh,") != std::string::npos ||
         text_lower.find("uh.") != std::string::npos) {
       return true;
     }
@@ -413,9 +462,8 @@ static void whisper_loop(void *data)
       }
 
       if (input_buf_size >= segment_size) {
-        info("found %d bytes, %d frames in input buffer, need >= %d, processing",
-              (int)(gf->input_buffers[0].size), (int)(gf->input_buffers[0].size / sizeof(float)),
-              (int)segment_size);
+        info("found %lu bytes, %lu frames in input buffer, need >= %lu, processing",
+              input_buf_size, (size_t)(input_buf_size / sizeof(float)), segment_size);
 
         // Process the audio. This will also remove the processed data from the input buffer.
         // Mutex is locked inside process_audio_from_buffer.
@@ -501,12 +549,16 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   const uint32_t total_frames_from_infos_ms =
     total_frames_from_infos * 1000 / gf->sample_rate; // number of frames in this packet
 
+  filler_segment = !filler_segment;
+
   if (filler_segment) {
     // this is a filler segment, reduce the output volume
 
-    // find first word boundary
-    const size_t first_boundary = word_boundary_simple(gf->copy_buffers[0], total_frames_from_infos,
-                                                       gf->sample_rate, 0.1f, false);
+    // find first word boundary, up to 50% of the way through the segment
+    // const size_t first_boundary = word_boundary_simple(gf->copy_buffers[0], total_frames_from_infos,
+    //                                                    total_frames_from_infos / 2,
+    //                                                    gf->sample_rate, 0.1f, true);
+    const size_t first_boundary = 0;
 
     info("filler segment, reducing volume on frames %lu -> %u", first_boundary,
           total_frames_from_infos);
@@ -515,6 +567,10 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
         gf->copy_buffers[c][i] = 0;
       }
     }
+  } else {
+    word_boundary_simple(gf->copy_buffers[0], total_frames_from_infos,
+                                              total_frames_from_infos,
+                                              gf->sample_rate, 0.01f, true);
   }
 
   {
@@ -560,6 +616,11 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
   struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
 
+  if (gf->whisper_context == nullptr) {
+    // Whisper not initialized, just pass through
+    return audio;
+  }
+
   {
     std::lock_guard<std::mutex> lock(whisper_buf_mutex); // scoped lock
     /* -----------------------------------------------
@@ -581,19 +642,19 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
     std::lock_guard<std::mutex> lock(whisper_outbuf_mutex); // scoped lock
 
     if (gf->info_out_buffer.size == 0) {
+      // nothing to output
       return NULL;
     }
 
-    /* -----------------------------------------------
-     * pop from output buffers to get audio packet info */
+    // pop from output buffers to get audio packet info
     circlebuf_pop_front(&gf->info_out_buffer, &info_out, sizeof(info_out));
-    info("audio packet info: timestamp=%" PRIu64 ", frames=%u", info_out.timestamp,
+    info("output packet info: timestamp=%llu, frames=%u", info_out.timestamp,
           info_out.frames);
 
-    /* -----------------------------------------------
-    * pop from output circlebuf to audio data */
+    // prepare output data buffer
     da_resize(gf->output_data, info_out.frames * gf->channels * sizeof(float));
 
+    // pop from output circlebuf to audio data
     for (size_t i = 0; i < gf->channels; i++) {
       gf->output_audio.data[i] = (uint8_t *)&gf->output_data.array[i * info_out.frames];
       circlebuf_pop_front(&gf->output_buffers[i], gf->output_audio.data[i],
