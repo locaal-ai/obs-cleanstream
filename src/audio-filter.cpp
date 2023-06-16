@@ -77,6 +77,10 @@ struct cleanstream_data {
   DARRAY(float) output_data;
 
   float filler_p_threshold;
+
+  bool do_silence;
+  bool vad_enabled;
+  int log_level;
 };
 
 std::mutex whisper_buf_mutex;
@@ -129,8 +133,7 @@ bool vad_simple(float *pcmf32, size_t pcm32f_size, uint32_t sample_rate, float v
   return true;
 }
 
-float avg_energy_in_window(const float *pcmf32, size_t window_i,
-                       uint64_t n_samples_window)
+float avg_energy_in_window(const float *pcmf32, size_t window_i, uint64_t n_samples_window)
 {
   float energy_in_window = 0.0f;
   for (uint64_t j = 0; j < n_samples_window; j++) {
@@ -141,8 +144,7 @@ float avg_energy_in_window(const float *pcmf32, size_t window_i,
   return energy_in_window;
 }
 
-float max_energy_in_window(const float *pcmf32, size_t window_i,
-                       uint64_t n_samples_window)
+float max_energy_in_window(const float *pcmf32, size_t window_i, uint64_t n_samples_window)
 {
   float energy_in_window = 0.0f;
   for (uint64_t j = 0; j < n_samples_window; j++) {
@@ -153,8 +155,8 @@ float max_energy_in_window(const float *pcmf32, size_t window_i,
 }
 
 // Find a word boundary
-size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size,
-                            uint32_t sample_rate, float thold, bool verbose)
+size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, uint32_t sample_rate,
+                            float thold, bool verbose)
 {
   UNUSED_PARAMETER(pcm32f_size);
 
@@ -162,8 +164,10 @@ size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size,
   const uint64_t n_samples_window = (sample_rate * 50) / 1000;
 
   float first_window_energy = avg_energy_in_window(pcmf32, 0, n_samples_window);
-  float last_window_energy = avg_energy_in_window(pcmf32, pcm32f_size - n_samples_window, n_samples_window);
-  float max_energy_in_middle = max_energy_in_window(pcmf32, n_samples_window, pcm32f_size - n_samples_window);
+  float last_window_energy =
+    avg_energy_in_window(pcmf32, pcm32f_size - n_samples_window, n_samples_window);
+  float max_energy_in_middle =
+    max_energy_in_window(pcmf32, n_samples_window, pcm32f_size - n_samples_window);
 
   if (verbose) {
     blog(LOG_INFO, "%s: first_window_energy: %f, last_window_energy: %f, max_energy_in_middle: %f",
@@ -172,7 +176,8 @@ size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size,
 
   // print avg energy in all windows in sample
   for (uint64_t i = 0; i < pcm32f_size - n_samples_window; i += n_samples_window) {
-    blog(LOG_INFO, "%s: avg energy_in_window %llu: %f", __func__, i, avg_energy_in_window(pcmf32, i, n_samples_window));
+    blog(LOG_INFO, "%s: avg energy_in_window %llu: %f", __func__, i,
+         avg_energy_in_window(pcmf32, i, n_samples_window));
   }
 
   const float max_energy_thold = max_energy_in_middle * thold;
@@ -211,7 +216,8 @@ static inline enum speaker_layout convert_speaker_layout(uint8_t channels)
   }
 }
 
-static struct whisper_context * init_whisper_context() {
+static struct whisper_context *init_whisper_context()
+{
   struct whisper_context *ctx = whisper_init_from_file(obs_module_file("models/ggml-tiny.en.bin"));
   if (ctx == nullptr) {
     error("Failed to load whisper model");
@@ -236,7 +242,7 @@ static std::string to_timestamp(int64_t t)
 static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
                                   size_t pcm32f_size)
 {
-  debug("%s: processing %d samples, %.3f sec, %d threads", __func__, int(pcm32f_size),
+  do_log(gf->log_level, "%s: processing %d samples, %.3f sec, %d threads", __func__, int(pcm32f_size),
         float(pcm32f_size) / WHISPER_SAMPLE_RATE, gf->whisper_params.n_threads);
 
   std::lock_guard<std::mutex> lock(whisper_ctx_mutex);
@@ -248,7 +254,8 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
   // run the inference
   int whisper_full_result = -1;
   try {
-    whisper_full_result = whisper_full(gf->whisper_context, gf->whisper_params, pcm32f_data, (int)pcm32f_size);
+    whisper_full_result =
+      whisper_full(gf->whisper_context, gf->whisper_params, pcm32f_data, (int)pcm32f_size);
   } catch (const std::exception &e) {
     error("Whisper exception: %s. Filter restart is required", e.what());
     whisper_free(gf->whisper_context);
@@ -275,7 +282,7 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
     std::string text_lower(text);
     std::transform(text_lower.begin(), text_lower.end(), text_lower.begin(), ::tolower);
     info("[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(), to_timestamp(t1).c_str(), sentence_p,
-          text_lower.c_str());
+         text_lower.c_str());
 
     if ((text_lower.find("[bl") != std::string::npos && sentence_p > gf->filler_p_threshold) ||
         text_lower.find("uh,") != std::string::npos ||
@@ -321,7 +328,7 @@ static void whisper_loop(void *data)
       }
 
       if (input_buf_size >= segment_size) {
-        debug("found %lu bytes, %lu frames in input buffer, need >= %lu, processing",
+        do_log(gf->log_level, "found %lu bytes, %lu frames in input buffer, need >= %lu, processing",
               input_buf_size, (size_t)(input_buf_size / sizeof(float)), segment_size);
 
         // Process the audio. This will also remove the processed data from the input buffer.
@@ -369,7 +376,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
       if (gf->last_num_frames > 0) {
         // move overlap frames from the end of the last copy_buffers to the beginning
         memcpy(gf->copy_buffers[c], gf->copy_buffers[c] + gf->last_num_frames - gf->overlap_frames,
-              gf->overlap_frames * sizeof(float));
+               gf->overlap_frames * sizeof(float));
         // copy new data to the end of copy_buffers[c]
         circlebuf_pop_front(&gf->input_buffers[c], gf->copy_buffers[c] + gf->overlap_frames,
                             num_new_frames_from_infos * sizeof(float));
@@ -383,9 +390,8 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
     gf->last_num_frames = num_new_frames_from_infos + gf->overlap_frames;
   }
 
-  debug("processing %d frames (%d ms), start timestamp %" PRIu64 " ",
-        (int)gf->last_num_frames, (int)(gf->last_num_frames * 1000 / gf->sample_rate),
-        start_timestamp);
+  do_log(gf->log_level, "processing %d frames (%d ms), start timestamp %" PRIu64 " ", (int)gf->last_num_frames,
+        (int)(gf->last_num_frames * 1000 / gf->sample_rate), start_timestamp);
 
   // time the audio processing
   auto start = std::chrono::high_resolution_clock::now();
@@ -397,46 +403,38 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   audio_resampler_resample(gf->resampler, (uint8_t **)output, &out_frames, &ts_offset,
                            (const uint8_t **)gf->copy_buffers, (uint32_t)gf->last_num_frames);
 
-  debug("%d channels, %d frames, %f ms", (int)gf->channels, (int)out_frames,
+  do_log(gf->log_level, "%d channels, %d frames, %f ms", (int)gf->channels, (int)out_frames,
         (float)out_frames / WHISPER_SAMPLE_RATE * 1000.0f);
 
-  bool filler_segment = false;
   bool skipped_inference = false;
 
-  if (::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, VAD_THOLD, FREQ_THOLD, false)) {
-    // const size_t word_boundary = word_boundary_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, 0.25f, true);
-    // debug("word boundary at %d ms", (int)(word_boundary * 1000 / WHISPER_SAMPLE_RATE));
-
-    // run the inference, this is a long blocking call
-    // if (word_boundary > 0) {
-      if (run_whisper_inference(gf, output[0], out_frames)) {
-        filler_segment = true;
-      }
-    // }
-  } else {
-    info("silence detected, skipping inference");
-    skipped_inference = true;
+  if (gf->vad_enabled) {
+    skipped_inference = !::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, VAD_THOLD, FREQ_THOLD, false);
   }
 
-  const uint32_t new_frames_from_infos_ms =
-    num_new_frames_from_infos * 1000 / gf->sample_rate; // number of frames in this packet
+  if (!skipped_inference) {
+    if (run_whisper_inference(gf, output[0], out_frames)) {
+      // this is a filler segment, reduce the output volume
 
-  if (filler_segment) {
-    // this is a filler segment, reduce the output volume
+      // find first word boundary, up to 50% of the way through the segment
+      // const size_t first_boundary = word_boundary_simple(gf->copy_buffers[0], num_new_frames_from_infos,
+      //                                                    num_new_frames_from_infos / 2,
+      //                                                    gf->sample_rate, 0.1f, true);
+      const size_t first_boundary = 0;
 
-    // find first word boundary, up to 50% of the way through the segment
-    // const size_t first_boundary = word_boundary_simple(gf->copy_buffers[0], num_new_frames_from_infos,
-    //                                                    num_new_frames_from_infos / 2,
-    //                                                    gf->sample_rate, 0.1f, true);
-    const size_t first_boundary = 0;
-
-    info("filler segment, reducing volume on frames %lu -> %u", first_boundary,
+      info("filler segment, reducing volume on frames %lu -> %u", first_boundary,
           num_new_frames_from_infos);
-    for (size_t c = 0; c < gf->channels; c++) {
-      for (size_t i = first_boundary; i < num_new_frames_from_infos; i++) {
-        gf->copy_buffers[c][i] = 0;
+
+      if (gf->do_silence) {
+        for (size_t c = 0; c < gf->channels; c++) {
+          for (size_t i = first_boundary; i < num_new_frames_from_infos; i++) {
+            gf->copy_buffers[c][i] = 0;
+          }
+        }
       }
     }
+  } else {
+    info("skipping inference");
   }
 
   {
@@ -444,7 +442,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
 
     struct cleanstream_audio_info info_out = {0};
     info_out.frames = num_new_frames_from_infos; // number of frames in this packet
-    info_out.timestamp = start_timestamp;      // timestamp of this packet
+    info_out.timestamp = start_timestamp;        // timestamp of this packet
     circlebuf_push_back(&gf->info_out_buffer, &info_out, sizeof(info_out));
 
     for (size_t c = 0; c < gf->channels; c++) {
@@ -452,7 +450,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
                           (num_new_frames_from_infos) * sizeof(float));
     }
     // log sizes of output buffers
-    debug("output info buffer size: %lu, output data buffer size bytes: %lu",
+    do_log(gf->log_level, "output info buffer size: %lu, output data buffer size bytes: %lu",
           gf->info_out_buffer.size / sizeof(struct cleanstream_audio_info),
           gf->output_buffers[0].size);
   }
@@ -460,19 +458,22 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   // end of timer
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-  debug("audio processing of %u ms new data took %d ms", new_frames_from_infos_ms, (int)duration);
+  const uint32_t new_frames_from_infos_ms =
+    num_new_frames_from_infos * 1000 / gf->sample_rate; // number of frames in this packet
+  do_log(gf->log_level, "audio processing of %u ms new data took %d ms", new_frames_from_infos_ms, (int)duration);
 
   if (duration > new_frames_from_infos_ms) {
     // try to decrease overlap down to minimum of 100 ms
     gf->overlap_ms = std::max((uint64_t)gf->overlap_ms - 10, (uint64_t)100);
     gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
-    debug("audio processing took too long (%d ms), reducing overlap to %lu ms", (int)duration,
+    do_log(gf->log_level, "audio processing took too long (%d ms), reducing overlap to %lu ms", (int)duration,
           gf->overlap_ms);
   } else if (!skipped_inference) {
     // try to increase overlap up to 75% of the segment
-    gf->overlap_ms = std::min((uint64_t)gf->overlap_ms + 10, (uint64_t)(new_frames_from_infos_ms * 0.75f));
+    gf->overlap_ms =
+      std::min((uint64_t)gf->overlap_ms + 10, (uint64_t)(new_frames_from_infos_ms * 0.75f));
     gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
-    debug("audio processing took %d ms, increasing overlap to %lu ms", (int)duration,
+    do_log(gf->log_level, "audio processing took %d ms, increasing overlap to %lu ms", (int)duration,
           gf->overlap_ms);
   }
 }
@@ -520,7 +521,7 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
     // pop from output buffers to get audio packet info
     circlebuf_pop_front(&gf->info_out_buffer, &info_out, sizeof(info_out));
-    debug("output packet info: timestamp=%llu, frames=%u, bytes=%lu, ms=%u", info_out.timestamp,
+    do_log(gf->log_level, "output packet info: timestamp=%llu, frames=%u, bytes=%lu, ms=%u", info_out.timestamp,
           info_out.frames, gf->output_buffers[0].size, info_out.frames * 1000 / gf->sample_rate);
 
     // prepare output data buffer
@@ -604,7 +605,8 @@ static void cleanstream_update(void *data, obs_data_t *s)
   gf->whisper_params.max_tokens = (int)obs_data_get_int(s, "max_tokens");
   gf->whisper_params.speed_up = obs_data_get_bool(s, "speed_up");
   gf->whisper_params.suppress_blank = obs_data_get_bool(s, "suppress_blank");
-  gf->whisper_params.suppress_non_speech_tokens = obs_data_get_bool(s, "suppress_non_speech_tokens");
+  gf->whisper_params.suppress_non_speech_tokens =
+    obs_data_get_bool(s, "suppress_non_speech_tokens");
   gf->whisper_params.temperature = (float)obs_data_get_double(s, "temperature");
   gf->whisper_params.max_initial_ts = (float)obs_data_get_double(s, "max_initial_ts");
   gf->whisper_params.length_penalty = (float)obs_data_get_double(s, "length_penalty");
@@ -631,7 +633,7 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 
   // allocate copy buffers
   gf->copy_buffers[0] = static_cast<float *>(bzalloc(gf->channels * gf->frames * sizeof(float)));
-  for (size_t i = 0; i < gf->channels; i++) {
+  for (size_t i = 0; i < gf->channels; i++) { // set the channel pointers
     gf->copy_buffers[i] = gf->copy_buffers[0] + i * gf->frames;
   }
 
@@ -643,17 +645,7 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   }
 
   gf->whisper_params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
-  gf->whisper_params.n_threads = std::min(8, (int32_t)std::thread::hardware_concurrency());
   gf->whisper_params.duration_ms = BUFFER_SIZE_MSEC;
-  gf->whisper_params.initial_prompt =
-    "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,";
-  gf->whisper_params.print_progress = false;
-  gf->whisper_params.print_realtime = false;
-  gf->whisper_params.token_timestamps = true;
-  gf->whisper_params.single_segment = true;
-  gf->whisper_params.suppress_non_speech_tokens = true;
-  gf->whisper_params.suppress_blank = true;
-  gf->whisper_params.max_tokens = 3;
 
   gf->overlap_ms = OVERLAP_SIZE_MSEC;
   gf->overlap_frames = (size_t)(gf->sample_rate / (1000.0f / gf->overlap_ms));
@@ -672,6 +664,10 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   gf->resampler = audio_resampler_create(&dst, &src);
   gf->resampler_back = audio_resampler_create(&src, &dst);
 
+  gf->do_silence = obs_data_get_bool(settings, "do_silence");
+  gf->vad_enabled = obs_data_get_bool(settings, "vad_enabled");
+  gf->log_level = (int)obs_data_get_int(settings, "log_level");
+
   cleanstream_update(gf, settings);
 
   // start the thread
@@ -683,7 +679,12 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 static void cleanstream_defaults(obs_data_t *s)
 {
   obs_data_set_default_double(s, "filler_p_threshold", 0.75);
-  obs_data_set_default_string(s, "initial_prompt", "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,");
+  obs_data_set_default_bool(s, "do_silence", true);
+  obs_data_set_default_bool(s, "vad_enabled", true);
+  obs_data_set_default_int(s, "log_level", LOG_DEBUG);
+  obs_data_set_default_string(
+    s, "initial_prompt",
+    "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,");
   obs_data_set_default_int(s, "n_threads", 8);
   obs_data_set_default_int(s, "n_max_text_ctx", 16384);
   obs_data_set_default_bool(s, "no_context", true);
@@ -712,14 +713,24 @@ static obs_properties_t *cleanstream_properties(void *data)
 
   obs_properties_add_float_slider(ppts, "filler_p_threshold", "filler_p_threshold", 0.0f, 1.0f,
                                   0.05f);
+  obs_properties_add_bool(ppts, "do_silence", "do_silence");
+  obs_properties_add_bool(ppts, "vad_enabled", "vad_enabled");
+  obs_property_t* list = obs_properties_add_list(ppts, "log_level", "log_level", OBS_COMBO_TYPE_LIST,
+                          OBS_COMBO_FORMAT_INT);
+  obs_property_list_add_int(list, "DEBUG", LOG_DEBUG);
+  obs_property_list_add_int(list, "INFO", LOG_INFO);
+  obs_property_list_add_int(list, "WARNING", LOG_WARNING);
+  obs_property_list_add_int(list, "ERROR", LOG_ERROR);
 
   obs_properties_t *whisper_params_group = obs_properties_create();
-  obs_properties_add_group(ppts, "whisper_params_group", "Whisper Parameters", OBS_GROUP_NORMAL, whisper_params_group);
+  obs_properties_add_group(ppts, "whisper_params_group", "Whisper Parameters", OBS_GROUP_NORMAL,
+                           whisper_params_group);
 
   // int n_threads;
   obs_properties_add_int_slider(whisper_params_group, "n_threads", "n_threads", 1, 8, 1);
   // int n_max_text_ctx;     // max tokens to use from past text as prompt for the decoder
-  obs_properties_add_int_slider(whisper_params_group, "n_max_text_ctx", "n_max_text_ctx", 0, 16384, 100);
+  obs_properties_add_int_slider(whisper_params_group, "n_max_text_ctx", "n_max_text_ctx", 0, 16384,
+                                100);
   // int offset_ms;          // start offset in ms
   // int duration_ms;        // audio duration to process in ms
   // bool translate;
@@ -740,7 +751,8 @@ static obs_properties_t *cleanstream_properties(void *data)
   // float thold_pt;         // timestamp token probability threshold (~0.01)
   obs_properties_add_float_slider(whisper_params_group, "thold_pt", "thold_pt", 0.0f, 1.0f, 0.05f);
   // float thold_ptsum;      // timestamp token sum probability threshold (~0.01)
-  obs_properties_add_float_slider(whisper_params_group, "thold_ptsum", "thold_ptsum", 0.0f, 1.0f, 0.05f);
+  obs_properties_add_float_slider(whisper_params_group, "thold_ptsum", "thold_ptsum", 0.0f, 1.0f,
+                                  0.05f);
   // int   max_len;          // max segment length in characters
   obs_properties_add_int_slider(whisper_params_group, "max_len", "max_len", 0, 100, 1);
   // bool  split_on_word;    // split on word rather than on token (when used with max_len)
@@ -750,17 +762,22 @@ static obs_properties_t *cleanstream_properties(void *data)
   // bool speed_up;          // speed-up the audio by 2x using Phase Vocoder
   obs_properties_add_bool(whisper_params_group, "speed_up", "speed_up");
   // const char * initial_prompt;
-  obs_properties_add_text(whisper_params_group, "initial_prompt", "initial_prompt", OBS_TEXT_DEFAULT);
+  obs_properties_add_text(whisper_params_group, "initial_prompt", "initial_prompt",
+                          OBS_TEXT_DEFAULT);
   // bool suppress_blank;    // ref: https://github.com/openai/whisper/blob/f82bc59f5ea234d4b97fb2860842ed38519f7e65/whisper/decoding.py#L89
   obs_properties_add_bool(whisper_params_group, "suppress_blank", "suppress_blank");
   // bool suppress_non_speech_tokens; // ref: https://github.com/openai/whisper/blob/7858aa9c08d98f75575035ecd6481f462d66ca27/whisper/tokenizer.py#L224-L253
-  obs_properties_add_bool(whisper_params_group, "suppress_non_speech_tokens", "suppress_non_speech_tokens");
+  obs_properties_add_bool(whisper_params_group, "suppress_non_speech_tokens",
+                          "suppress_non_speech_tokens");
   // float temperature;      // initial decoding temperature, ref: https://ai.stackexchange.com/a/32478
-  obs_properties_add_float_slider(whisper_params_group, "temperature", "temperature", 0.0f, 1.0f, 0.05f);
+  obs_properties_add_float_slider(whisper_params_group, "temperature", "temperature", 0.0f, 1.0f,
+                                  0.05f);
   // float max_initial_ts;   // ref: https://github.com/openai/whisper/blob/f82bc59f5ea234d4b97fb2860842ed38519f7e65/whisper/decoding.py#L97
-  obs_properties_add_float_slider(whisper_params_group, "max_initial_ts", "max_initial_ts", 0.0f, 1.0f, 0.05f);
+  obs_properties_add_float_slider(whisper_params_group, "max_initial_ts", "max_initial_ts", 0.0f,
+                                  1.0f, 0.05f);
   // float length_penalty;   // ref: https://github.com/openai/whisper/blob/f82bc59f5ea234d4b97fb2860842ed38519f7e65/whisper/transcribe.py#L267
-  obs_properties_add_float_slider(whisper_params_group, "length_penalty", "length_penalty", -1.0f, 1.0f, 0.1f);
+  obs_properties_add_float_slider(whisper_params_group, "length_penalty", "length_penalty", -1.0f,
+                                  1.0f, 0.1f);
 
   UNUSED_PARAMETER(data);
   return ppts;
