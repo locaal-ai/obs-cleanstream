@@ -236,7 +236,7 @@ static std::string to_timestamp(int64_t t)
 static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
                                   size_t pcm32f_size)
 {
-  info("%s: processing %d samples, %.3f sec, %d threads", __func__, int(pcm32f_size),
+  debug("%s: processing %d samples, %.3f sec, %d threads", __func__, int(pcm32f_size),
         float(pcm32f_size) / WHISPER_SAMPLE_RATE, gf->whisper_params.n_threads);
 
   std::lock_guard<std::mutex> lock(whisper_ctx_mutex);
@@ -321,7 +321,7 @@ static void whisper_loop(void *data)
       }
 
       if (input_buf_size >= segment_size) {
-        info("found %lu bytes, %lu frames in input buffer, need >= %lu, processing",
+        debug("found %lu bytes, %lu frames in input buffer, need >= %lu, processing",
               input_buf_size, (size_t)(input_buf_size / sizeof(float)), segment_size);
 
         // Process the audio. This will also remove the processed data from the input buffer.
@@ -383,7 +383,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
     gf->last_num_frames = num_new_frames_from_infos + gf->overlap_frames;
   }
 
-  info("processing %d frames (%d ms), start timestamp %" PRIu64 " ",
+  debug("processing %d frames (%d ms), start timestamp %" PRIu64 " ",
         (int)gf->last_num_frames, (int)(gf->last_num_frames * 1000 / gf->sample_rate),
         start_timestamp);
 
@@ -397,7 +397,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   audio_resampler_resample(gf->resampler, (uint8_t **)output, &out_frames, &ts_offset,
                            (const uint8_t **)gf->copy_buffers, (uint32_t)gf->last_num_frames);
 
-  info("%d channels, %d frames, %f ms", (int)gf->channels, (int)out_frames,
+  debug("%d channels, %d frames, %f ms", (int)gf->channels, (int)out_frames,
         (float)out_frames / WHISPER_SAMPLE_RATE * 1000.0f);
 
   bool filler_segment = false;
@@ -405,7 +405,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
 
   if (::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, VAD_THOLD, FREQ_THOLD, false)) {
     // const size_t word_boundary = word_boundary_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, 0.25f, true);
-    // info("word boundary at %d ms", (int)(word_boundary * 1000 / WHISPER_SAMPLE_RATE));
+    // debug("word boundary at %d ms", (int)(word_boundary * 1000 / WHISPER_SAMPLE_RATE));
 
     // run the inference, this is a long blocking call
     // if (word_boundary > 0) {
@@ -452,7 +452,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
                           (num_new_frames_from_infos) * sizeof(float));
     }
     // log sizes of output buffers
-    info("output info buffer size: %lu, output data buffer size bytes: %lu",
+    debug("output info buffer size: %lu, output data buffer size bytes: %lu",
           gf->info_out_buffer.size / sizeof(struct cleanstream_audio_info),
           gf->output_buffers[0].size);
   }
@@ -460,19 +460,19 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   // end of timer
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-  info("audio processing of %u ms new data took %d ms", new_frames_from_infos_ms, (int)duration);
+  debug("audio processing of %u ms new data took %d ms", new_frames_from_infos_ms, (int)duration);
 
   if (duration > new_frames_from_infos_ms) {
     // try to decrease overlap down to minimum of 100 ms
     gf->overlap_ms = std::max((uint64_t)gf->overlap_ms - 10, (uint64_t)100);
     gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
-    info("audio processing took too long (%d ms), reducing overlap to %lu ms", (int)duration,
+    debug("audio processing took too long (%d ms), reducing overlap to %lu ms", (int)duration,
           gf->overlap_ms);
   } else if (!skipped_inference) {
     // try to increase overlap up to 75% of the segment
     gf->overlap_ms = std::min((uint64_t)gf->overlap_ms + 10, (uint64_t)(new_frames_from_infos_ms * 0.75f));
     gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
-    info("audio processing took %d ms, increasing overlap to %lu ms", (int)duration,
+    debug("audio processing took %d ms, increasing overlap to %lu ms", (int)duration,
           gf->overlap_ms);
   }
 }
@@ -520,7 +520,7 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
     // pop from output buffers to get audio packet info
     circlebuf_pop_front(&gf->info_out_buffer, &info_out, sizeof(info_out));
-    info("output packet info: timestamp=%llu, frames=%u, bytes=%lu, ms=%u", info_out.timestamp,
+    debug("output packet info: timestamp=%llu, frames=%u, bytes=%lu, ms=%u", info_out.timestamp,
           info_out.frames, gf->output_buffers[0].size, info_out.frames * 1000 / gf->sample_rate);
 
     // prepare output data buffer
