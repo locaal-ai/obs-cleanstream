@@ -187,48 +187,6 @@ size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size,
   return 0;
 }
 
-static const char *cleanstream_name(void *unused)
-{
-  UNUSED_PARAMETER(unused);
-  return MT_("CleanStreamAudioFilter");
-}
-
-static void cleanstream_destroy(void *data)
-{
-  struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
-
-  info("cleanstream_destroy");
-  {
-    std::lock_guard<std::mutex> lock(whisper_ctx_mutex);
-    if (gf->whisper_context != nullptr) {
-      whisper_free(gf->whisper_context);
-      gf->whisper_context = nullptr;
-    }
-  }
-  // join the thread
-  gf->whisper_thread.join();
-
-  if (gf->resampler) {
-    audio_resampler_destroy(gf->resampler);
-    audio_resampler_destroy(gf->resampler_back);
-  }
-  {
-    std::lock_guard<std::mutex> lockbuf(whisper_buf_mutex);
-    std::lock_guard<std::mutex> lockoutbuf(whisper_outbuf_mutex);
-    bfree(gf->copy_buffers[0]);
-    gf->copy_buffers[0] = nullptr;
-    for (size_t i = 0; i < gf->channels; i++) {
-      circlebuf_free(&gf->input_buffers[i]);
-      circlebuf_free(&gf->output_buffers[i]);
-    }
-  }
-  circlebuf_free(&gf->info_buffer);
-  circlebuf_free(&gf->info_out_buffer);
-  da_free(gf->output_data);
-
-  bfree(gf);
-}
-
 static inline enum speaker_layout convert_speaker_layout(uint8_t channels)
 {
   switch (channels) {
@@ -253,15 +211,6 @@ static inline enum speaker_layout convert_speaker_layout(uint8_t channels)
   }
 }
 
-static void cleanstream_update(void *data, obs_data_t *s)
-{
-  struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
-
-  gf->filler_p_threshold = (float)obs_data_get_double(s, "filler_p_threshold");
-  // gf->whisper_params.initial_prompt = obs_data_get_string(s, "initial_prompt");
-
-}
-
 static struct whisper_context * init_whisper_context() {
   struct whisper_context *ctx = whisper_init_from_file(obs_module_file("models/ggml-tiny.en.bin"));
   if (ctx == nullptr) {
@@ -269,76 +218,6 @@ static struct whisper_context * init_whisper_context() {
     return nullptr;
   }
   return ctx;
-}
-
-static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
-{
-  struct cleanstream_data *gf =
-    static_cast<struct cleanstream_data *>(bmalloc(sizeof(struct cleanstream_data)));
-
-  // Get the number of channels for the input source
-  gf->channels = audio_output_get_channels(obs_get_audio());
-  gf->sample_rate = audio_output_get_sample_rate(obs_get_audio());
-  gf->frames = (size_t)(gf->sample_rate / (1000.0f / BUFFER_SIZE_MSEC));
-
-  for (size_t i = 0; i < MAX_AUDIO_CHANNELS; i++) {
-    gf->copy_buffers[i] = nullptr;
-    circlebuf_init(&gf->input_buffers[i]);
-    circlebuf_init(&gf->output_buffers[i]);
-  }
-  circlebuf_init(&gf->info_buffer);
-  circlebuf_init(&gf->info_out_buffer);
-  da_init(gf->output_data);
-
-  // allocate copy buffers
-  gf->copy_buffers[0] = static_cast<float *>(bzalloc(gf->channels * gf->frames * sizeof(float)));
-  for (size_t i = 0; i < gf->channels; i++) {
-    gf->copy_buffers[i] = gf->copy_buffers[0] + i * gf->frames;
-  }
-
-  gf->context = filter;
-  gf->whisper_context = init_whisper_context();
-  if (gf->whisper_context == nullptr) {
-    error("Failed to load whisper model");
-    return nullptr;
-  }
-
-  gf->whisper_params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
-  gf->whisper_params.n_threads = std::min(8, (int32_t)std::thread::hardware_concurrency());
-  gf->whisper_params.duration_ms = BUFFER_SIZE_MSEC;
-  gf->whisper_params.initial_prompt =
-    "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,";
-  gf->whisper_params.print_progress = false;
-  gf->whisper_params.print_realtime = false;
-  gf->whisper_params.token_timestamps = true;
-  gf->whisper_params.single_segment = true;
-  gf->whisper_params.suppress_non_speech_tokens = true;
-  gf->whisper_params.suppress_blank = true;
-  gf->whisper_params.max_tokens = 3;
-
-  gf->overlap_ms = OVERLAP_SIZE_MSEC;
-  gf->overlap_frames = (size_t)(gf->sample_rate / (1000.0f / gf->overlap_ms));
-  info("CleanStream filter: channels %d, frames %d, sample_rate %d", (int)gf->channels,
-       (int)gf->frames, gf->sample_rate);
-
-  struct resample_info src, dst;
-  src.samples_per_sec = gf->sample_rate;
-  src.format = AUDIO_FORMAT_FLOAT_PLANAR;
-  src.speakers = convert_speaker_layout((uint8_t)gf->channels);
-
-  dst.samples_per_sec = WHISPER_SAMPLE_RATE;
-  dst.format = AUDIO_FORMAT_FLOAT_PLANAR;
-  dst.speakers = convert_speaker_layout((uint8_t)1);
-
-  gf->resampler = audio_resampler_create(&dst, &src);
-  gf->resampler_back = audio_resampler_create(&src, &dst);
-
-  cleanstream_update(gf, settings);
-
-  // start the thread
-  gf->whisper_thread = std::thread(whisper_loop, gf);
-
-  return gf;
 }
 
 static std::string to_timestamp(int64_t t)
@@ -660,11 +539,171 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
   return &gf->output_audio;
 }
 
+static const char *cleanstream_name(void *unused)
+{
+  UNUSED_PARAMETER(unused);
+  return MT_("CleanStreamAudioFilter");
+}
+
+static void cleanstream_destroy(void *data)
+{
+  struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
+
+  info("cleanstream_destroy");
+  {
+    std::lock_guard<std::mutex> lock(whisper_ctx_mutex);
+    if (gf->whisper_context != nullptr) {
+      whisper_free(gf->whisper_context);
+      gf->whisper_context = nullptr;
+    }
+  }
+  // join the thread
+  gf->whisper_thread.join();
+
+  if (gf->resampler) {
+    audio_resampler_destroy(gf->resampler);
+    audio_resampler_destroy(gf->resampler_back);
+  }
+  {
+    std::lock_guard<std::mutex> lockbuf(whisper_buf_mutex);
+    std::lock_guard<std::mutex> lockoutbuf(whisper_outbuf_mutex);
+    bfree(gf->copy_buffers[0]);
+    gf->copy_buffers[0] = nullptr;
+    for (size_t i = 0; i < gf->channels; i++) {
+      circlebuf_free(&gf->input_buffers[i]);
+      circlebuf_free(&gf->output_buffers[i]);
+    }
+  }
+  circlebuf_free(&gf->info_buffer);
+  circlebuf_free(&gf->info_out_buffer);
+  da_free(gf->output_data);
+
+  bfree(gf);
+}
+
+static void cleanstream_update(void *data, obs_data_t *s)
+{
+  struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
+
+  gf->filler_p_threshold = (float)obs_data_get_double(s, "filler_p_threshold");
+
+  gf->whisper_params.initial_prompt = obs_data_get_string(s, "initial_prompt");
+  gf->whisper_params.n_threads = (int)obs_data_get_int(s, "n_threads");
+  gf->whisper_params.n_max_text_ctx = (int)obs_data_get_int(s, "n_max_text_ctx");
+  gf->whisper_params.no_context = obs_data_get_bool(s, "no_context");
+  gf->whisper_params.single_segment = obs_data_get_bool(s, "single_segment");
+  gf->whisper_params.print_special = obs_data_get_bool(s, "print_special");
+  gf->whisper_params.print_progress = obs_data_get_bool(s, "print_progress");
+  gf->whisper_params.print_realtime = obs_data_get_bool(s, "print_realtime");
+  gf->whisper_params.print_timestamps = obs_data_get_bool(s, "print_timestamps");
+  gf->whisper_params.token_timestamps = obs_data_get_bool(s, "token_timestamps");
+  gf->whisper_params.thold_pt = (float)obs_data_get_double(s, "thold_pt");
+  gf->whisper_params.thold_ptsum = (float)obs_data_get_double(s, "thold_ptsum");
+  gf->whisper_params.max_len = (int)obs_data_get_int(s, "max_len");
+  gf->whisper_params.split_on_word = obs_data_get_bool(s, "split_on_word");
+  gf->whisper_params.max_tokens = (int)obs_data_get_int(s, "max_tokens");
+  gf->whisper_params.speed_up = obs_data_get_bool(s, "speed_up");
+  gf->whisper_params.suppress_blank = obs_data_get_bool(s, "suppress_blank");
+  gf->whisper_params.suppress_non_speech_tokens = obs_data_get_bool(s, "suppress_non_speech_tokens");
+  gf->whisper_params.temperature = (float)obs_data_get_double(s, "temperature");
+  gf->whisper_params.max_initial_ts = (float)obs_data_get_double(s, "max_initial_ts");
+  gf->whisper_params.length_penalty = (float)obs_data_get_double(s, "length_penalty");
+}
+
+static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
+{
+  struct cleanstream_data *gf =
+    static_cast<struct cleanstream_data *>(bmalloc(sizeof(struct cleanstream_data)));
+
+  // Get the number of channels for the input source
+  gf->channels = audio_output_get_channels(obs_get_audio());
+  gf->sample_rate = audio_output_get_sample_rate(obs_get_audio());
+  gf->frames = (size_t)(gf->sample_rate / (1000.0f / BUFFER_SIZE_MSEC));
+
+  for (size_t i = 0; i < MAX_AUDIO_CHANNELS; i++) {
+    gf->copy_buffers[i] = nullptr;
+    circlebuf_init(&gf->input_buffers[i]);
+    circlebuf_init(&gf->output_buffers[i]);
+  }
+  circlebuf_init(&gf->info_buffer);
+  circlebuf_init(&gf->info_out_buffer);
+  da_init(gf->output_data);
+
+  // allocate copy buffers
+  gf->copy_buffers[0] = static_cast<float *>(bzalloc(gf->channels * gf->frames * sizeof(float)));
+  for (size_t i = 0; i < gf->channels; i++) {
+    gf->copy_buffers[i] = gf->copy_buffers[0] + i * gf->frames;
+  }
+
+  gf->context = filter;
+  gf->whisper_context = init_whisper_context();
+  if (gf->whisper_context == nullptr) {
+    error("Failed to load whisper model");
+    return nullptr;
+  }
+
+  gf->whisper_params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
+  gf->whisper_params.n_threads = std::min(8, (int32_t)std::thread::hardware_concurrency());
+  gf->whisper_params.duration_ms = BUFFER_SIZE_MSEC;
+  gf->whisper_params.initial_prompt =
+    "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,";
+  gf->whisper_params.print_progress = false;
+  gf->whisper_params.print_realtime = false;
+  gf->whisper_params.token_timestamps = true;
+  gf->whisper_params.single_segment = true;
+  gf->whisper_params.suppress_non_speech_tokens = true;
+  gf->whisper_params.suppress_blank = true;
+  gf->whisper_params.max_tokens = 3;
+
+  gf->overlap_ms = OVERLAP_SIZE_MSEC;
+  gf->overlap_frames = (size_t)(gf->sample_rate / (1000.0f / gf->overlap_ms));
+  info("CleanStream filter: channels %d, frames %d, sample_rate %d", (int)gf->channels,
+       (int)gf->frames, gf->sample_rate);
+
+  struct resample_info src, dst;
+  src.samples_per_sec = gf->sample_rate;
+  src.format = AUDIO_FORMAT_FLOAT_PLANAR;
+  src.speakers = convert_speaker_layout((uint8_t)gf->channels);
+
+  dst.samples_per_sec = WHISPER_SAMPLE_RATE;
+  dst.format = AUDIO_FORMAT_FLOAT_PLANAR;
+  dst.speakers = convert_speaker_layout((uint8_t)1);
+
+  gf->resampler = audio_resampler_create(&dst, &src);
+  gf->resampler_back = audio_resampler_create(&src, &dst);
+
+  cleanstream_update(gf, settings);
+
+  // start the thread
+  gf->whisper_thread = std::thread(whisper_loop, gf);
+
+  return gf;
+}
+
 static void cleanstream_defaults(obs_data_t *s)
 {
   obs_data_set_default_double(s, "filler_p_threshold", 0.75);
-  obs_data_set_default_string(s, "initial_prompt",
-    "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,");
+  obs_data_set_default_string(s, "initial_prompt", "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,");
+  obs_data_set_default_int(s, "n_threads", 8);
+  obs_data_set_default_int(s, "n_max_text_ctx", 16384);
+  obs_data_set_default_bool(s, "no_context", true);
+  obs_data_set_default_bool(s, "single_segment", false);
+  obs_data_set_default_bool(s, "print_special", false);
+  obs_data_set_default_bool(s, "print_progress", false);
+  obs_data_set_default_bool(s, "print_realtime", false);
+  obs_data_set_default_bool(s, "print_timestamps", false);
+  obs_data_set_default_bool(s, "token_timestamps", false);
+  obs_data_set_default_double(s, "thold_pt", 0.01);
+  obs_data_set_default_double(s, "thold_ptsum", 0.01);
+  obs_data_set_default_int(s, "max_len", 0);
+  obs_data_set_default_bool(s, "split_on_word", false);
+  obs_data_set_default_int(s, "max_tokens", 3);
+  obs_data_set_default_bool(s, "speed_up", false);
+  obs_data_set_default_bool(s, "suppress_blank", true);
+  obs_data_set_default_bool(s, "suppress_non_speech_tokens", false);
+  obs_data_set_default_double(s, "temperature", 0.0);
+  obs_data_set_default_double(s, "max_initial_ts", 1.0);
+  obs_data_set_default_double(s, "length_penalty", -1.0);
 }
 
 static obs_properties_t *cleanstream_properties(void *data)
@@ -673,7 +712,55 @@ static obs_properties_t *cleanstream_properties(void *data)
 
   obs_properties_add_float_slider(ppts, "filler_p_threshold", "filler_p_threshold", 0.0f, 1.0f,
                                   0.05f);
-  obs_properties_add_text(ppts, "initial_prompt", "initial_prompt", OBS_TEXT_DEFAULT);
+
+  obs_properties_t *whisper_params_group = obs_properties_create();
+  obs_properties_add_group(ppts, "whisper_params_group", "Whisper Parameters", OBS_GROUP_NORMAL, whisper_params_group);
+
+  // int n_threads;
+  obs_properties_add_int_slider(whisper_params_group, "n_threads", "n_threads", 1, 8, 1);
+  // int n_max_text_ctx;     // max tokens to use from past text as prompt for the decoder
+  obs_properties_add_int_slider(whisper_params_group, "n_max_text_ctx", "n_max_text_ctx", 0, 16384, 100);
+  // int offset_ms;          // start offset in ms
+  // int duration_ms;        // audio duration to process in ms
+  // bool translate;
+  // bool no_context;        // do not use past transcription (if any) as initial prompt for the decoder
+  obs_properties_add_bool(whisper_params_group, "no_context", "no_context");
+  // bool single_segment;    // force single segment output (useful for streaming)
+  obs_properties_add_bool(whisper_params_group, "single_segment", "single_segment");
+  // bool print_special;     // print special tokens (e.g. <SOT>, <EOT>, <BEG>, etc.)
+  obs_properties_add_bool(whisper_params_group, "print_special", "print_special");
+  // bool print_progress;    // print progress information
+  obs_properties_add_bool(whisper_params_group, "print_progress", "print_progress");
+  // bool print_realtime;    // print results from within whisper.cpp (avoid it, use callback instead)
+  obs_properties_add_bool(whisper_params_group, "print_realtime", "print_realtime");
+  // bool print_timestamps;  // print timestamps for each text segment when printing realtime
+  obs_properties_add_bool(whisper_params_group, "print_timestamps", "print_timestamps");
+  // bool  token_timestamps; // enable token-level timestamps
+  obs_properties_add_bool(whisper_params_group, "token_timestamps", "token_timestamps");
+  // float thold_pt;         // timestamp token probability threshold (~0.01)
+  obs_properties_add_float_slider(whisper_params_group, "thold_pt", "thold_pt", 0.0f, 1.0f, 0.05f);
+  // float thold_ptsum;      // timestamp token sum probability threshold (~0.01)
+  obs_properties_add_float_slider(whisper_params_group, "thold_ptsum", "thold_ptsum", 0.0f, 1.0f, 0.05f);
+  // int   max_len;          // max segment length in characters
+  obs_properties_add_int_slider(whisper_params_group, "max_len", "max_len", 0, 100, 1);
+  // bool  split_on_word;    // split on word rather than on token (when used with max_len)
+  obs_properties_add_bool(whisper_params_group, "split_on_word", "split_on_word");
+  // int   max_tokens;       // max tokens per segment (0 = no limit)
+  obs_properties_add_int_slider(whisper_params_group, "max_tokens", "max_tokens", 0, 100, 1);
+  // bool speed_up;          // speed-up the audio by 2x using Phase Vocoder
+  obs_properties_add_bool(whisper_params_group, "speed_up", "speed_up");
+  // const char * initial_prompt;
+  obs_properties_add_text(whisper_params_group, "initial_prompt", "initial_prompt", OBS_TEXT_DEFAULT);
+  // bool suppress_blank;    // ref: https://github.com/openai/whisper/blob/f82bc59f5ea234d4b97fb2860842ed38519f7e65/whisper/decoding.py#L89
+  obs_properties_add_bool(whisper_params_group, "suppress_blank", "suppress_blank");
+  // bool suppress_non_speech_tokens; // ref: https://github.com/openai/whisper/blob/7858aa9c08d98f75575035ecd6481f462d66ca27/whisper/tokenizer.py#L224-L253
+  obs_properties_add_bool(whisper_params_group, "suppress_non_speech_tokens", "suppress_non_speech_tokens");
+  // float temperature;      // initial decoding temperature, ref: https://ai.stackexchange.com/a/32478
+  obs_properties_add_float_slider(whisper_params_group, "temperature", "temperature", 0.0f, 1.0f, 0.05f);
+  // float max_initial_ts;   // ref: https://github.com/openai/whisper/blob/f82bc59f5ea234d4b97fb2860842ed38519f7e65/whisper/decoding.py#L97
+  obs_properties_add_float_slider(whisper_params_group, "max_initial_ts", "max_initial_ts", 0.0f, 1.0f, 0.05f);
+  // float length_penalty;   // ref: https://github.com/openai/whisper/blob/f82bc59f5ea234d4b97fb2860842ed38519f7e65/whisper/transcribe.py#L267
+  obs_properties_add_float_slider(whisper_params_group, "length_penalty", "length_penalty", -1.0f, 1.0f, 0.1f);
 
   UNUSED_PARAMETER(data);
   return ppts;
