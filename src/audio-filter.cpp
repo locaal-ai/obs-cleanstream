@@ -162,8 +162,6 @@ float max_energy_in_window(const float *pcmf32, size_t window_i, uint64_t n_samp
 size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, uint32_t sample_rate,
                             float thold, bool verbose)
 {
-  UNUSED_PARAMETER(pcm32f_size);
-
   // scan the buffer with a window of 50ms
   const uint64_t n_samples_window = (sample_rate * 50) / 1000;
 
@@ -176,19 +174,18 @@ size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, uint32_t sa
   if (verbose) {
     blog(LOG_INFO, "%s: first_window_energy: %f, last_window_energy: %f, max_energy_in_middle: %f",
          __func__, first_window_energy, last_window_energy, max_energy_in_middle);
-  }
-
-  // print avg energy in all windows in sample
-  for (uint64_t i = 0; i < pcm32f_size - n_samples_window; i += n_samples_window) {
-    blog(LOG_INFO, "%s: avg energy_in_window %llu: %f", __func__, i,
-         avg_energy_in_window(pcmf32, i, n_samples_window));
+    // print avg energy in all windows in sample
+    for (uint64_t i = 0; i < pcm32f_size - n_samples_window; i += n_samples_window) {
+      blog(LOG_INFO, "%s: avg energy_in_window %" PRIu64 ": %f", __func__, i,
+           avg_energy_in_window(pcmf32, i, n_samples_window));
+    }
   }
 
   const float max_energy_thold = max_energy_in_middle * thold;
   if (first_window_energy < max_energy_thold && last_window_energy < max_energy_thold) {
     if (verbose) {
-      blog(LOG_INFO, "%s: word boundary found between %llu and %llu\n", __func__, n_samples_window,
-           pcm32f_size - n_samples_window);
+      blog(LOG_INFO, "%s: word boundary found between %" PRIu64 " and %" PRIu64, __func__,
+           n_samples_window, pcm32f_size - n_samples_window);
     }
     return n_samples_window;
   }
@@ -563,7 +560,8 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
     // pop from output buffers to get audio packet info
     circlebuf_pop_front(&gf->info_out_buffer, &info_out, sizeof(info_out));
-    do_log(gf->log_level, "output packet info: timestamp=%llu, frames=%u, bytes=%lu, ms=%u",
+    do_log(gf->log_level,
+           "output packet info: timestamp=%" PRIu64 ", frames=%" PRIu32 ", bytes=%lu, ms=%u",
            info_out.timestamp, info_out.frames, gf->output_buffers[0].size,
            info_out.frames * 1000 / gf->sample_rate);
 
@@ -671,7 +669,6 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   gf->frames = (size_t)(gf->sample_rate / (1000.0f / BUFFER_SIZE_MSEC));
 
   for (size_t i = 0; i < MAX_AUDIO_CHANNELS; i++) {
-    gf->copy_buffers[i] = nullptr;
     circlebuf_init(&gf->input_buffers[i]);
     circlebuf_init(&gf->output_buffers[i]);
   }
