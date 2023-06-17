@@ -252,10 +252,10 @@ enum DetectionResult {
 };
 
 static int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
-                                  size_t pcm32f_size)
+                                 size_t pcm32f_size)
 {
-  do_log(gf->log_level, "%s: processing %d samples, %.3f sec, %d threads", __func__, int(pcm32f_size),
-        float(pcm32f_size) / WHISPER_SAMPLE_RATE, gf->whisper_params.n_threads);
+  do_log(gf->log_level, "%s: processing %d samples, %.3f sec, %d threads", __func__,
+         int(pcm32f_size), float(pcm32f_size) / WHISPER_SAMPLE_RATE, gf->whisper_params.n_threads);
 
   std::lock_guard<std::mutex> lock(whisper_ctx_mutex);
   if (gf->whisper_context == nullptr) {
@@ -351,8 +351,9 @@ static void whisper_loop(void *data)
       }
 
       if (input_buf_size >= segment_size) {
-        do_log(gf->log_level, "found %lu bytes, %lu frames in input buffer, need >= %lu, processing",
-              input_buf_size, (size_t)(input_buf_size / sizeof(float)), segment_size);
+        do_log(gf->log_level,
+               "found %lu bytes, %lu frames in input buffer, need >= %lu, processing",
+               input_buf_size, (size_t)(input_buf_size / sizeof(float)), segment_size);
 
         // Process the audio. This will also remove the processed data from the input buffer.
         // Mutex is locked inside process_audio_from_buffer.
@@ -413,8 +414,9 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
     gf->last_num_frames = num_new_frames_from_infos + gf->overlap_frames;
   }
 
-  do_log(gf->log_level, "processing %d frames (%d ms), start timestamp %" PRIu64 " ", (int)gf->last_num_frames,
-        (int)(gf->last_num_frames * 1000 / gf->sample_rate), start_timestamp);
+  do_log(gf->log_level, "processing %d frames (%d ms), start timestamp %" PRIu64 " ",
+         (int)gf->last_num_frames, (int)(gf->last_num_frames * 1000 / gf->sample_rate),
+         start_timestamp);
 
   // time the audio processing
   auto start = std::chrono::high_resolution_clock::now();
@@ -427,12 +429,13 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
                            (const uint8_t **)gf->copy_buffers, (uint32_t)gf->last_num_frames);
 
   do_log(gf->log_level, "%d channels, %d frames, %f ms", (int)gf->channels, (int)out_frames,
-        (float)out_frames / WHISPER_SAMPLE_RATE * 1000.0f);
+         (float)out_frames / WHISPER_SAMPLE_RATE * 1000.0f);
 
   bool skipped_inference = false;
 
   if (gf->vad_enabled) {
-    skipped_inference = !::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, VAD_THOLD, FREQ_THOLD, false);
+    skipped_inference =
+      !::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, VAD_THOLD, FREQ_THOLD, false);
   }
 
   if (!skipped_inference) {
@@ -449,7 +452,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
       const size_t first_boundary = 0;
 
       info("filler segment, reducing volume on frames %lu -> %u", first_boundary,
-          num_new_frames_from_infos);
+           num_new_frames_from_infos);
 
       if (gf->do_silence) {
         for (size_t c = 0; c < gf->channels; c++) {
@@ -461,8 +464,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
     } else if (inference_result == DETECTION_RESULT_BEEP) {
       const size_t first_boundary = 0;
 
-      info("beep segment, adding a beep %lu -> %u", first_boundary,
-          num_new_frames_from_infos);
+      info("beep segment, adding a beep %lu -> %u", first_boundary, num_new_frames_from_infos);
       if (gf->do_silence) {
         for (size_t c = 0; c < gf->channels; c++) {
           for (size_t i = first_boundary; i < num_new_frames_from_infos; i++) {
@@ -490,8 +492,8 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
     }
     // log sizes of output buffers
     do_log(gf->log_level, "output info buffer size: %lu, output data buffer size bytes: %lu",
-          gf->info_out_buffer.size / sizeof(struct cleanstream_audio_info),
-          gf->output_buffers[0].size);
+           gf->info_out_buffer.size / sizeof(struct cleanstream_audio_info),
+           gf->output_buffers[0].size);
   }
 
   // end of timer
@@ -499,21 +501,22 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
   const uint32_t new_frames_from_infos_ms =
     num_new_frames_from_infos * 1000 / gf->sample_rate; // number of frames in this packet
-  do_log(gf->log_level, "audio processing of %u ms new data took %d ms", new_frames_from_infos_ms, (int)duration);
+  do_log(gf->log_level, "audio processing of %u ms new data took %d ms", new_frames_from_infos_ms,
+         (int)duration);
 
   if (duration > new_frames_from_infos_ms) {
     // try to decrease overlap down to minimum of 100 ms
     gf->overlap_ms = std::max((uint64_t)gf->overlap_ms - 10, (uint64_t)100);
     gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
-    do_log(gf->log_level, "audio processing took too long (%d ms), reducing overlap to %lu ms", (int)duration,
-          gf->overlap_ms);
+    do_log(gf->log_level, "audio processing took too long (%d ms), reducing overlap to %lu ms",
+           (int)duration, gf->overlap_ms);
   } else if (!skipped_inference) {
     // try to increase overlap up to 75% of the segment
     gf->overlap_ms =
       std::min((uint64_t)gf->overlap_ms + 10, (uint64_t)(new_frames_from_infos_ms * 0.75f));
     gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
-    do_log(gf->log_level, "audio processing took %d ms, increasing overlap to %lu ms", (int)duration,
-          gf->overlap_ms);
+    do_log(gf->log_level, "audio processing took %d ms, increasing overlap to %lu ms",
+           (int)duration, gf->overlap_ms);
   }
 }
 
@@ -560,8 +563,9 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
     // pop from output buffers to get audio packet info
     circlebuf_pop_front(&gf->info_out_buffer, &info_out, sizeof(info_out));
-    do_log(gf->log_level, "output packet info: timestamp=%llu, frames=%u, bytes=%lu, ms=%u", info_out.timestamp,
-          info_out.frames, gf->output_buffers[0].size, info_out.frames * 1000 / gf->sample_rate);
+    do_log(gf->log_level, "output packet info: timestamp=%llu, frames=%u, bytes=%lu, ms=%u",
+           info_out.timestamp, info_out.frames, gf->output_buffers[0].size,
+           info_out.frames * 1000 / gf->sample_rate);
 
     // prepare output data buffer
     da_resize(gf->output_data, info_out.frames * gf->channels * sizeof(float));
@@ -728,9 +732,7 @@ static void cleanstream_defaults(obs_data_t *s)
   obs_data_set_default_int(s, "log_level", LOG_DEBUG);
   obs_data_set_default_string(s, "detect_regex", "\\b(u|a|e)(h|m)[\\.,]*");
   obs_data_set_default_string(s, "beep_regex", "(fuck)|(shit)");
-  obs_data_set_default_string(
-    s, "initial_prompt",
-    "uhm, Uh, um, Uhh, um. um... uh. uh... ");
+  obs_data_set_default_string(s, "initial_prompt", "uhm, Uh, um, Uhh, um. um... uh. uh... ");
   obs_data_set_default_int(s, "n_threads", 8);
   obs_data_set_default_int(s, "n_max_text_ctx", 16384);
   obs_data_set_default_bool(s, "no_context", true);
@@ -761,8 +763,8 @@ static obs_properties_t *cleanstream_properties(void *data)
                                   0.05f);
   obs_properties_add_bool(ppts, "do_silence", "do_silence");
   obs_properties_add_bool(ppts, "vad_enabled", "vad_enabled");
-  obs_property_t* list = obs_properties_add_list(ppts, "log_level", "log_level", OBS_COMBO_TYPE_LIST,
-                          OBS_COMBO_FORMAT_INT);
+  obs_property_t *list = obs_properties_add_list(ppts, "log_level", "log_level",
+                                                 OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
   obs_property_list_add_int(list, "DEBUG", LOG_DEBUG);
   obs_property_list_add_int(list, "INFO", LOG_INFO);
   obs_property_list_add_int(list, "WARNING", LOG_WARNING);
