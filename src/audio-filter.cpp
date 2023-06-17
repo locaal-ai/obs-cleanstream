@@ -11,6 +11,7 @@
 #include <cinttypes>
 #include <algorithm>
 #include <regex>
+#include <functional>
 
 #include <whisper.h>
 
@@ -83,6 +84,7 @@ struct cleanstream_data {
   bool vad_enabled;
   int log_level;
   std::string detect_regex;
+  std::string beep_regex;
 };
 
 std::mutex whisper_buf_mutex;
@@ -241,7 +243,15 @@ static std::string to_timestamp(int64_t t)
   return std::string(buf);
 }
 
-static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
+enum DetectionResult {
+  DETECTION_RESULT_UNKNOWN = 0,
+  DETECTION_RESULT_SILENCE = 1,
+  DETECTION_RESULT_SPEECH = 2,
+  DETECTION_RESULT_FILLER = 3,
+  DETECTION_RESULT_BEEP = 4,
+};
+
+static int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
                                   size_t pcm32f_size)
 {
   do_log(gf->log_level, "%s: processing %d samples, %.3f sec, %d threads", __func__, int(pcm32f_size),
@@ -250,7 +260,7 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
   std::lock_guard<std::mutex> lock(whisper_ctx_mutex);
   if (gf->whisper_context == nullptr) {
     warn("whisper context is null");
-    return false;
+    return DETECTION_RESULT_UNKNOWN;
   }
 
   // run the inference
@@ -262,10 +272,12 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
     error("Whisper exception: %s. Filter restart is required", e.what());
     whisper_free(gf->whisper_context);
     gf->whisper_context = nullptr;
+    return DETECTION_RESULT_UNKNOWN;
   }
 
   if (whisper_full_result != 0) {
     warn("failed to process audio, error %d", whisper_full_result);
+    return DETECTION_RESULT_UNKNOWN;
   } else {
     const int n_segment = 0;
     const char *text = whisper_full_get_segment_text(gf->whisper_context, n_segment);
@@ -279,10 +291,17 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
     }
     sentence_p /= (float)n_tokens;
 
-    // if text (convert to lowercase) contains `[blank` or `uh,` or `uh...` then we have a
-    // blank segment
+    // if text (convert to lowercase) contains `uh,` or `uh...` then we have a blank segment
+
+    // convert text to lowercase
     std::string text_lower(text);
     std::transform(text_lower.begin(), text_lower.end(), text_lower.begin(), ::tolower);
+    // trim whitespace (use lambda)
+    text_lower.erase(std::find_if(text_lower.rbegin(), text_lower.rend(),
+                                  [](unsigned char ch) { return !std::isspace(ch); })
+                       .base(),
+                     text_lower.end());
+
     info("[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(), to_timestamp(t1).c_str(), sentence_p,
          text_lower.c_str());
 
@@ -290,14 +309,18 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
     try {
       std::regex filler_regex(gf->detect_regex);
       if (std::regex_search(text_lower, filler_regex)) {
-        return true;
+        return DETECTION_RESULT_FILLER;
+      }
+      std::regex beep_regex(gf->beep_regex);
+      if (std::regex_search(text_lower, beep_regex)) {
+        return DETECTION_RESULT_BEEP;
       }
     } catch (const std::regex_error &e) {
       error("Regex error: %s", e.what());
     }
   }
 
-  return false;
+  return DETECTION_RESULT_SPEECH;
 }
 
 static void process_audio_from_buffer(struct cleanstream_data *gf);
@@ -413,7 +436,10 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   }
 
   if (!skipped_inference) {
-    if (run_whisper_inference(gf, output[0], out_frames)) {
+    // run inference
+    const int inference_result = run_whisper_inference(gf, output[0], out_frames);
+
+    if (inference_result == DETECTION_RESULT_FILLER) {
       // this is a filler segment, reduce the output volume
 
       // find first word boundary, up to 50% of the way through the segment
@@ -429,6 +455,19 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
         for (size_t c = 0; c < gf->channels; c++) {
           for (size_t i = first_boundary; i < num_new_frames_from_infos; i++) {
             gf->copy_buffers[c][i] = 0;
+          }
+        }
+      }
+    } else if (inference_result == DETECTION_RESULT_BEEP) {
+      const size_t first_boundary = 0;
+
+      info("beep segment, adding a beep %lu -> %u", first_boundary,
+          num_new_frames_from_infos);
+      if (gf->do_silence) {
+        for (size_t c = 0; c < gf->channels; c++) {
+          for (size_t i = first_boundary; i < num_new_frames_from_infos; i++) {
+            // add a beep at A4 (440Hz)
+            gf->copy_buffers[c][i] = 0.5f * sinf(2.0f * M_PI * 440.0f * (float)i / gf->sample_rate);
           }
         }
       }
@@ -591,6 +630,7 @@ static void cleanstream_update(void *data, obs_data_t *s)
   gf->do_silence = obs_data_get_bool(s, "do_silence");
   gf->vad_enabled = obs_data_get_bool(s, "vad_enabled");
   gf->detect_regex = obs_data_get_string(s, "detect_regex");
+  gf->beep_regex = obs_data_get_string(s, "beep_regex");
 
   gf->whisper_params.initial_prompt = obs_data_get_string(s, "initial_prompt");
   gf->whisper_params.n_threads = (int)obs_data_get_int(s, "n_threads");
@@ -686,14 +726,15 @@ static void cleanstream_defaults(obs_data_t *s)
   obs_data_set_default_bool(s, "do_silence", true);
   obs_data_set_default_bool(s, "vad_enabled", true);
   obs_data_set_default_int(s, "log_level", LOG_DEBUG);
-  obs_data_set_default_string(s, "detect_regex", "\\b(uh|um|ah|eh|\\[bl)\\b");
+  obs_data_set_default_string(s, "detect_regex", "\\b(u|a|e)(h|m)[\\.,]*");
+  obs_data_set_default_string(s, "beep_regex", "(fuck)|(shit)");
   obs_data_set_default_string(
     s, "initial_prompt",
-    "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,");
+    "uhm, Uh, um, Uhh, um. um... uh. uh... ");
   obs_data_set_default_int(s, "n_threads", 8);
   obs_data_set_default_int(s, "n_max_text_ctx", 16384);
   obs_data_set_default_bool(s, "no_context", true);
-  obs_data_set_default_bool(s, "single_segment", false);
+  obs_data_set_default_bool(s, "single_segment", true);
   obs_data_set_default_bool(s, "print_special", false);
   obs_data_set_default_bool(s, "print_progress", false);
   obs_data_set_default_bool(s, "print_realtime", false);
@@ -705,9 +746,9 @@ static void cleanstream_defaults(obs_data_t *s)
   obs_data_set_default_bool(s, "split_on_word", false);
   obs_data_set_default_int(s, "max_tokens", 3);
   obs_data_set_default_bool(s, "speed_up", false);
-  obs_data_set_default_bool(s, "suppress_blank", true);
-  obs_data_set_default_bool(s, "suppress_non_speech_tokens", false);
-  obs_data_set_default_double(s, "temperature", 0.0);
+  obs_data_set_default_bool(s, "suppress_blank", false);
+  obs_data_set_default_bool(s, "suppress_non_speech_tokens", true);
+  obs_data_set_default_double(s, "temperature", 0.5);
   obs_data_set_default_double(s, "max_initial_ts", 1.0);
   obs_data_set_default_double(s, "length_penalty", -1.0);
 }
@@ -727,6 +768,7 @@ static obs_properties_t *cleanstream_properties(void *data)
   obs_property_list_add_int(list, "WARNING", LOG_WARNING);
   obs_property_list_add_int(list, "ERROR", LOG_ERROR);
   obs_properties_add_text(ppts, "detect_regex", "detect_regex", OBS_TEXT_DEFAULT);
+  obs_properties_add_text(ppts, "beep_regex", "beep_regex", OBS_TEXT_DEFAULT);
 
   obs_properties_t *whisper_params_group = obs_properties_create();
   obs_properties_add_group(ppts, "whisper_params_group", "Whisper Parameters", OBS_GROUP_NORMAL,
