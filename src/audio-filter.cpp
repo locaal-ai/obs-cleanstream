@@ -10,6 +10,7 @@
 #include <mutex>
 #include <cinttypes>
 #include <algorithm>
+#include <regex>
 
 #include <whisper.h>
 
@@ -81,6 +82,7 @@ struct cleanstream_data {
   bool do_silence;
   bool vad_enabled;
   int log_level;
+  std::string detect_regex;
 };
 
 std::mutex whisper_buf_mutex;
@@ -284,16 +286,14 @@ static bool run_whisper_inference(struct cleanstream_data *gf, const float *pcm3
     info("[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(), to_timestamp(t1).c_str(), sentence_p,
          text_lower.c_str());
 
-    if ((text_lower.find("[bl") != std::string::npos && sentence_p > gf->filler_p_threshold) ||
-        text_lower.find("uh,") != std::string::npos ||
-        text_lower.find("um,") != std::string::npos ||
-        text_lower.find("um.") != std::string::npos ||
-        text_lower.find("ah.") != std::string::npos ||
-        text_lower.find("ah,") != std::string::npos ||
-        text_lower.find("eh.") != std::string::npos ||
-        text_lower.find("eh,") != std::string::npos ||
-        text_lower.find("uh.") != std::string::npos) {
-      return true;
+    // use a regular expression to detect filler words with a word boundary
+    try {
+      std::regex filler_regex(gf->detect_regex);
+      if (std::regex_search(text_lower, filler_regex)) {
+        return true;
+      }
+    } catch (const std::regex_error &e) {
+      error("Regex error: %s", e.what());
     }
   }
 
@@ -587,6 +587,10 @@ static void cleanstream_update(void *data, obs_data_t *s)
   struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
 
   gf->filler_p_threshold = (float)obs_data_get_double(s, "filler_p_threshold");
+  gf->log_level = (int)obs_data_get_int(s, "log_level");
+  gf->do_silence = obs_data_get_bool(s, "do_silence");
+  gf->vad_enabled = obs_data_get_bool(s, "vad_enabled");
+  gf->detect_regex = obs_data_get_string(s, "detect_regex");
 
   gf->whisper_params.initial_prompt = obs_data_get_string(s, "initial_prompt");
   gf->whisper_params.n_threads = (int)obs_data_get_int(s, "n_threads");
@@ -682,6 +686,7 @@ static void cleanstream_defaults(obs_data_t *s)
   obs_data_set_default_bool(s, "do_silence", true);
   obs_data_set_default_bool(s, "vad_enabled", true);
   obs_data_set_default_int(s, "log_level", LOG_DEBUG);
+  obs_data_set_default_string(s, "detect_regex", "\\b(uh|um|ah|eh|\\[bl)\\b");
   obs_data_set_default_string(
     s, "initial_prompt",
     "hmm, mm, mhm, mmm, uhm, Uh, um, Uhh, Umm, ehm, uuuh, Ahh, ahm, eh, Ehh, ehh,");
@@ -721,6 +726,7 @@ static obs_properties_t *cleanstream_properties(void *data)
   obs_property_list_add_int(list, "INFO", LOG_INFO);
   obs_property_list_add_int(list, "WARNING", LOG_WARNING);
   obs_property_list_add_int(list, "ERROR", LOG_ERROR);
+  obs_properties_add_text(ppts, "detect_regex", "detect_regex", OBS_TEXT_DEFAULT);
 
   obs_properties_t *whisper_params_group = obs_properties_create();
   obs_properties_add_group(ppts, "whisper_params_group", "Whisper Parameters", OBS_GROUP_NORMAL,
