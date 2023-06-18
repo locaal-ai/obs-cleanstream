@@ -85,6 +85,7 @@ struct cleanstream_data {
   int log_level;
   std::string detect_regex;
   std::string beep_regex;
+  bool log_words;
 };
 
 std::mutex whisper_buf_mutex;
@@ -299,17 +300,19 @@ static int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32
                        .base(),
                      text_lower.end());
 
-    info("[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(), to_timestamp(t1).c_str(), sentence_p,
-         text_lower.c_str());
+    if (gf->log_words) {
+      info("[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(), to_timestamp(t1).c_str(), sentence_p,
+           text_lower.c_str());
+    }
 
     // use a regular expression to detect filler words with a word boundary
     try {
       std::regex filler_regex(gf->detect_regex);
-      if (std::regex_search(text_lower, filler_regex)) {
+      if (std::regex_search(text_lower, filler_regex, std::regex_constants::match_any)) {
         return DETECTION_RESULT_FILLER;
       }
       std::regex beep_regex(gf->beep_regex);
-      if (std::regex_search(text_lower, beep_regex)) {
+      if (std::regex_search(text_lower, beep_regex, std::regex_constants::match_any)) {
         return DETECTION_RESULT_BEEP;
       }
     } catch (const std::regex_error &e) {
@@ -633,6 +636,7 @@ static void cleanstream_update(void *data, obs_data_t *s)
   gf->vad_enabled = obs_data_get_bool(s, "vad_enabled");
   gf->detect_regex = obs_data_get_string(s, "detect_regex");
   gf->beep_regex = obs_data_get_string(s, "beep_regex");
+  gf->log_words = obs_data_get_bool(s, "log_words");
 
   gf->whisper_params.initial_prompt = obs_data_get_string(s, "initial_prompt");
   gf->whisper_params.n_threads = (int)obs_data_get_int(s, "n_threads");
@@ -712,6 +716,7 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   gf->do_silence = obs_data_get_bool(settings, "do_silence");
   gf->vad_enabled = obs_data_get_bool(settings, "vad_enabled");
   gf->log_level = (int)obs_data_get_int(settings, "log_level");
+  gf->log_words = obs_data_get_bool(settings, "log_words");
 
   cleanstream_update(gf, settings);
 
@@ -729,6 +734,7 @@ static void cleanstream_defaults(obs_data_t *s)
   obs_data_set_default_int(s, "log_level", LOG_DEBUG);
   obs_data_set_default_string(s, "detect_regex", "\\b(u|a|e)(h|m)[\\.,]*");
   obs_data_set_default_string(s, "beep_regex", "(fuck)|(shit)");
+  obs_data_set_default_bool(s, "log_words", true);
   obs_data_set_default_string(s, "initial_prompt", "uhm, Uh, um, Uhh, um. um... uh. uh... ");
   obs_data_set_default_int(s, "n_threads", 8);
   obs_data_set_default_int(s, "n_max_text_ctx", 16384);
@@ -765,7 +771,7 @@ static obs_properties_t *cleanstream_properties(void *data)
   obs_property_list_add_int(list, "DEBUG", LOG_DEBUG);
   obs_property_list_add_int(list, "INFO", LOG_INFO);
   obs_property_list_add_int(list, "WARNING", LOG_WARNING);
-  obs_property_list_add_int(list, "ERROR", LOG_ERROR);
+  obs_properties_add_bool(ppts, "log_words", "log_words");
   obs_properties_add_text(ppts, "detect_regex", "detect_regex", OBS_TEXT_DEFAULT);
   obs_properties_add_text(ppts, "beep_regex", "beep_regex", OBS_TEXT_DEFAULT);
 
