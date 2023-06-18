@@ -19,7 +19,9 @@ Check out the [latest releases](https://github.com/royshil/obs-cleanstream/relea
 
 ## Code Walkthrough
 This video walkthrough (YouTube) will explain various parts of the code of you're looking to learn from what I've discovered.
-<a href="https://youtu.be/HdSI3sUKwsY" target="_blank"><img width="480" src="https://github.com/royshil/obs-cleanstream/assets/441170/cf17cb9b-512c-454b-b8c6-96f7af885df6"></a>
+<a href="https://youtu.be/HdSI3sUKwsY" target="_blank">
+  <img width="480" src="https://img.youtube.com/vi/HdSI3sUKwsY/maxresdefault.jpg" />
+</a>
 
 ## Requirements
 - OBS version 28+ ([download](https://obsproject.com/download))
