@@ -59,6 +59,7 @@ struct cleanstream_data {
 
   /* PCM buffers */
   float *copy_buffers[MAX_PREPROC_CHANNELS];
+  DARRAY(float) copy_output_buffers[MAX_PREPROC_CHANNELS];
   struct circlebuf info_buffer;
   struct circlebuf info_out_buffer;
   struct circlebuf input_buffers[MAX_PREPROC_CHANNELS];
@@ -438,6 +439,12 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
       !::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, VAD_THOLD, FREQ_THOLD, false);
   }
 
+  // allocate output buffer
+  for (size_t c = 0; c < gf->channels; c++) {
+    darray_copy_array(sizeof(float), &(gf->copy_output_buffers[c].da), gf->copy_buffers[c],
+                      gf->last_num_frames);
+  }
+
   if (!skipped_inference) {
     // run inference
     const int inference_result = run_whisper_inference(gf, output[0], out_frames);
@@ -457,7 +464,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
       if (gf->do_silence) {
         for (size_t c = 0; c < gf->channels; c++) {
           for (size_t i = first_boundary; i < num_new_frames_from_infos; i++) {
-            gf->copy_buffers[c][i] = 0;
+            gf->copy_output_buffers[c].array[i] = 0;
           }
         }
       }
@@ -469,7 +476,8 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
         for (size_t c = 0; c < gf->channels; c++) {
           for (size_t i = first_boundary; i < num_new_frames_from_infos; i++) {
             // add a beep at A4 (440Hz)
-            gf->copy_buffers[c][i] = 0.5f * sinf(2.0f * M_PI * 440.0f * (float)i / gf->sample_rate);
+            gf->copy_output_buffers[c].array[i] =
+              0.5f * sinf(2.0f * M_PI * 440.0f * (float)i / gf->sample_rate);
           }
         }
       }
@@ -487,7 +495,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
     circlebuf_push_back(&gf->info_out_buffer, &info_out, sizeof(info_out));
 
     for (size_t c = 0; c < gf->channels; c++) {
-      circlebuf_push_back(&gf->output_buffers[c], gf->copy_buffers[c],
+      circlebuf_push_back(&gf->output_buffers[c], gf->copy_output_buffers[c].array,
                           (num_new_frames_from_infos) * sizeof(float));
     }
     // log sizes of output buffers
@@ -538,13 +546,11 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
   {
     std::lock_guard<std::mutex> lock(whisper_buf_mutex); // scoped lock
-    /* -----------------------------------------------
-     * push back current audio data to input circlebuf */
+    // push back current audio data to input circlebuf
     for (size_t c = 0; c < gf->channels; c++) {
       circlebuf_push_back(&gf->input_buffers[c], audio->data[c], audio->frames * sizeof(float));
     }
-    /* -----------------------------------------------
-     * push audio packet info (timestamp/frame count) to info circlebuf */
+    // push audio packet info (timestamp/frame count) to info circlebuf
     struct cleanstream_audio_info info = {0};
     info.frames = audio->frames;       // number of frames in this packet
     info.timestamp = audio->timestamp; // timestamp of this packet
@@ -617,6 +623,7 @@ static void cleanstream_destroy(void *data)
     for (size_t i = 0; i < gf->channels; i++) {
       circlebuf_free(&gf->input_buffers[i]);
       circlebuf_free(&gf->output_buffers[i]);
+      da_free(gf->copy_output_buffers[i]);
     }
   }
   circlebuf_free(&gf->info_buffer);
@@ -684,6 +691,7 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   gf->copy_buffers[0] = static_cast<float *>(bzalloc(gf->channels * gf->frames * sizeof(float)));
   for (size_t i = 0; i < gf->channels; i++) { // set the channel pointers
     gf->copy_buffers[i] = gf->copy_buffers[0] + i * gf->frames;
+    da_init(gf->copy_output_buffers[i]);
   }
 
   gf->context = filter;
@@ -837,7 +845,7 @@ static obs_properties_t *cleanstream_properties(void *data)
 }
 
 struct obs_source_info my_audio_filter_info = {
-  .id = "my_audio_filter",
+  .id = "cleanstream_audio_filter",
   .type = OBS_SOURCE_TYPE_FILTER,
   .output_flags = OBS_SOURCE_AUDIO,
   .get_name = cleanstream_name,
