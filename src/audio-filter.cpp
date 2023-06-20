@@ -356,7 +356,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
       if (start_timestamp == 0) {
         start_timestamp = info_from_buf.timestamp;
       }
-      do_log(gf->log_level, "popped %d frames from info buffer, %d needed",
+      do_log(gf->log_level, "popped %d frames from info buffer, %lu needed",
              num_new_frames_from_infos, how_many_frames_needed);
       // Check if we're within the needed segment length
       if (num_new_frames_from_infos > how_many_frames_needed) {
@@ -367,7 +367,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
         break;
       }
     }
-    
+
     /* Pop from input circlebuf */
     for (size_t c = 0; c < gf->channels; c++) {
       if (gf->last_num_frames > 0) {
@@ -378,9 +378,12 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
         circlebuf_pop_front(&gf->input_buffers[c], gf->copy_buffers[c] + gf->overlap_frames,
                             num_new_frames_from_infos * sizeof(float));
       } else {
-        // Very first time, just copy data to the end of copy_buffers[c]
+        do_log(gf->log_level, "popped %u frames from input buffer. buffer size is %lu",
+               num_new_frames_from_infos, gf->input_buffers[c].size);
+
+        // Very first time, just copy data to copy_buffers[c]
         circlebuf_pop_front(&gf->input_buffers[c], gf->copy_buffers[c],
-                            (num_new_frames_from_infos + gf->overlap_frames) * sizeof(float));
+                            num_new_frames_from_infos * sizeof(float));
       }
     }
 
@@ -575,6 +578,8 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
   {
     std::lock_guard<std::mutex> lock(whisper_buf_mutex); // scoped lock
+    do_log(gf->log_level, "pushing %lu frames to input buffer. current size: %lu (bytes)",
+           (size_t)(audio->frames), gf->input_buffers[0].size);
     // push back current audio data to input circlebuf
     for (size_t c = 0; c < gf->channels; c++) {
       circlebuf_push_back(&gf->input_buffers[c], audio->data[c], audio->frames * sizeof(float));
@@ -787,7 +792,7 @@ static void cleanstream_defaults(obs_data_t *s)
   obs_data_set_default_double(s, "filler_p_threshold", 0.75);
   obs_data_set_default_bool(s, "do_silence", true);
   obs_data_set_default_bool(s, "vad_enabled", true);
-  obs_data_set_default_int(s, "log_level", LOG_INFO);
+  obs_data_set_default_int(s, "log_level", LOG_DEBUG);
   obs_data_set_default_string(s, "detect_regex", "\\b(u|a|e)(h|m)[\\.,]*");
   obs_data_set_default_string(s, "beep_regex", "(fuck)|(shit)");
   obs_data_set_default_bool(s, "log_words", true);
