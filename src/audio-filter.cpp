@@ -87,6 +87,7 @@ struct cleanstream_data {
   std::string detect_regex;
   std::string beep_regex;
   bool log_words;
+  bool active;
 };
 
 std::mutex whisper_buf_mutex;
@@ -290,8 +291,6 @@ static int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32
     }
     sentence_p /= (float)n_tokens;
 
-    // if text (convert to lowercase) contains `uh,` or `uh...` then we have a blank segment
-
     // convert text to lowercase
     std::string text_lower(text);
     std::transform(text_lower.begin(), text_lower.end(), text_lower.begin(), ::tolower);
@@ -306,15 +305,23 @@ static int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32
            text_lower.c_str());
     }
 
+    if (text_lower.empty()) {
+      return DETECTION_RESULT_SILENCE;
+    }
+
     // use a regular expression to detect filler words with a word boundary
     try {
-      std::regex filler_regex(gf->detect_regex);
-      if (std::regex_search(text_lower, filler_regex, std::regex_constants::match_any)) {
-        return DETECTION_RESULT_FILLER;
+      if (!gf->detect_regex.empty()) {
+        std::regex filler_regex(gf->detect_regex);
+        if (std::regex_search(text_lower, filler_regex, std::regex_constants::match_any)) {
+          return DETECTION_RESULT_FILLER;
+        }
       }
-      std::regex beep_regex(gf->beep_regex);
-      if (std::regex_search(text_lower, beep_regex, std::regex_constants::match_any)) {
-        return DETECTION_RESULT_BEEP;
+      if (!gf->beep_regex.empty()) {
+        std::regex beep_regex(gf->beep_regex);
+        if (std::regex_search(text_lower, beep_regex, std::regex_constants::match_any)) {
+          return DETECTION_RESULT_BEEP;
+        }
       }
     } catch (const std::regex_error &e) {
       error("Regex error: %s", e.what());
@@ -539,6 +546,10 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
 
   struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
 
+  if (!gf->active) {
+    return audio;
+  }
+
   if (gf->whisper_context == nullptr) {
     // Whisper not initialized, just pass through
     return audio;
@@ -725,6 +736,7 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   gf->vad_enabled = obs_data_get_bool(settings, "vad_enabled");
   gf->log_level = (int)obs_data_get_int(settings, "log_level");
   gf->log_words = obs_data_get_bool(settings, "log_words");
+  gf->active = true;
 
   cleanstream_update(gf, settings);
 
@@ -732,6 +744,20 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   gf->whisper_thread = std::thread(whisper_loop, gf);
 
   return gf;
+}
+
+static void cleanstream_activate(void *data)
+{
+  struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
+  info("CleanStream filter activated");
+  gf->active = true;
+}
+
+static void cleanstream_deactivate(void *data)
+{
+  struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
+  info("CleanStream filter deactivated");
+  gf->active = false;
 }
 
 static void cleanstream_defaults(obs_data_t *s)
@@ -851,6 +877,8 @@ struct obs_source_info my_audio_filter_info = {
   .get_name = cleanstream_name,
   .create = cleanstream_create,
   .destroy = cleanstream_destroy,
+  .activate = cleanstream_activate,
+  .deactivate = cleanstream_deactivate,
   .get_defaults = cleanstream_defaults,
   .get_properties = cleanstream_properties,
   .update = cleanstream_update,
