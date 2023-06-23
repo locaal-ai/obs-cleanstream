@@ -1,7 +1,7 @@
 # obs-cleanstream
 **🚧 EXPERIMENTAL 🚧** 
 
-CleanStream is an OBS plugin that cleans live audio streams from unwanted words and utterances. 
+CleanStream is an OBS plugin that cleans live audio streams from unwanted words and utterances using AI.
 
 **🚧 EXPERIMENTAL 🚧**
 
@@ -14,11 +14,14 @@ CleanStream is an OBS plugin that cleans live audio streams from unwanted words 
 
 </div>
 
+Check out our other plugin: [OBS Background Removal](https://github.com/royshil/obs-backgroundremoval)
+
 ## Download
 Check out the [latest releases](https://github.com/royshil/obs-cleanstream/releases) for downloads and install instructions.
 
 ## Code Walkthrough
 This video walkthrough (YouTube) will explain various parts of the code of you're looking to learn from what I've discovered.
+
 <a href="https://youtu.be/HdSI3sUKwsY" target="_blank">
   <img width="480" src="https://img.youtube.com/vi/HdSI3sUKwsY/maxresdefault.jpg" />
 </a>
@@ -31,13 +34,15 @@ We do not support older versions of OBS since the plugin is using newer APIs.
 ## Introduction
 CleanStream is an OBS plugin that cleans live audio streams from unwanted words and utterances, such as "uh"s and "um"s, and other words that you can configure, like profanity.
 
+See our [resource on the OBS Forums](https://obsproject.com/forum/resources/cleanstream-remove-uhs-ums-profanity-in-your-live-stream-or-recording-with-ai.1732/) for additional information.
+
 It is using a neural network ([OpenAI Whisper](https://github.com/openai/whisper)) to predict in real time the speech and remove the unwanted words.
 
 It's using the [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) project from [ggerganov](https://github.com/ggerganov) to run the Whisper network in a very efficient way.
 
 ### 🚧🚧🚧 **This plugin is still experimental and is not ready for live production use.** 🚧🚧🚧
 
-But it is working and you can try it out. *Please report any issues you find.* 🙏
+But it is working and you can try it out. *Please report any issues you find.* 🙏 ([submit an issue](https://github.com/royshil/obs-cleanstream/issues))
 
 We're working on improving the plugin and adding more features. If you have any ideas or suggestions, please open an issue.
 
@@ -47,7 +52,7 @@ GPU support is coming soon. Whisper.cpp is using GGML which should have GPU supp
 
 The plugin was built and tested on Mac OSX, Windows and Ubuntu Linux. Help is appreciated in building on other OSs and packages.
 
-The building pipelines in CI take care of the heavy lifting. Use them in order to build the plugin locally. Note that due to the fact we're building and packaging OpenCV and ONNX Runtime the build times are quite long.
+The building pipelines in CI take care of the heavy lifting. Use them in order to build the plugin locally.
 
 Start by cloning this repo to a directory of your choice.
 
