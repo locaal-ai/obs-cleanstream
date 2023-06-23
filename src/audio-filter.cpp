@@ -84,8 +84,8 @@ struct cleanstream_data {
   bool do_silence;
   bool vad_enabled;
   int log_level;
-  std::string detect_regex;
-  std::string beep_regex;
+  const char *detect_regex;
+  const char *beep_regex;
   bool log_words;
   bool active;
 };
@@ -129,7 +129,7 @@ bool vad_simple(float *pcmf32, size_t pcm32f_size, uint32_t sample_rate, float v
   energy_all /= n_samples;
 
   if (verbose) {
-    blog(LOG_DEBUG, "%s: energy_all: %f, vad_thold: %f, freq_thold: %f\n", __func__, energy_all,
+    blog(LOG_INFO, "%s: energy_all: %f, vad_thold: %f, freq_thold: %f", __func__, energy_all,
          vad_thold, freq_thold);
   }
 
@@ -311,13 +311,13 @@ static int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32
 
     // use a regular expression to detect filler words with a word boundary
     try {
-      if (!gf->detect_regex.empty()) {
+      if (gf->detect_regex != nullptr && strlen(gf->detect_regex) > 0) {
         std::regex filler_regex(gf->detect_regex);
         if (std::regex_search(text_lower, filler_regex, std::regex_constants::match_any)) {
           return DETECTION_RESULT_FILLER;
         }
       }
-      if (!gf->beep_regex.empty()) {
+      if (gf->beep_regex != nullptr && strlen(gf->beep_regex) > 0) {
         std::regex beep_regex(gf->beep_regex);
         if (std::regex_search(text_lower, beep_regex, std::regex_constants::match_any)) {
           return DETECTION_RESULT_BEEP;
@@ -378,14 +378,13 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
         circlebuf_pop_front(&gf->input_buffers[c], gf->copy_buffers[c] + gf->overlap_frames,
                             num_new_frames_from_infos * sizeof(float));
       } else {
-        do_log(gf->log_level, "popped %u frames from input buffer. buffer size is %lu",
-               num_new_frames_from_infos, gf->input_buffers[c].size);
-
         // Very first time, just copy data to copy_buffers[c]
         circlebuf_pop_front(&gf->input_buffers[c], gf->copy_buffers[c],
                             num_new_frames_from_infos * sizeof(float));
       }
     }
+    do_log(gf->log_level, "popped %u frames from input buffer. input_buffer[0] size is %lu",
+           num_new_frames_from_infos, gf->input_buffers[0].size);
 
     if (gf->last_num_frames > 0) {
       gf->last_num_frames = num_new_frames_from_infos + gf->overlap_frames;
@@ -414,14 +413,13 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
   bool skipped_inference = false;
 
   if (gf->vad_enabled) {
-    skipped_inference =
-      !::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, VAD_THOLD, FREQ_THOLD, false);
+    skipped_inference = !::vad_simple(output[0], out_frames, WHISPER_SAMPLE_RATE, VAD_THOLD,
+                                      FREQ_THOLD, gf->log_level != LOG_DEBUG);
   }
 
-  // allocate output buffer
+  // copy output buffer before potentially modifying it
   for (size_t c = 0; c < gf->channels; c++) {
-    darray_copy_array(sizeof(float), &(gf->copy_output_buffers[c].da), gf->copy_buffers[c],
-                      gf->last_num_frames);
+    da_copy_array(gf->copy_output_buffers[c], gf->copy_buffers[c], gf->last_num_frames);
   }
 
   if (!skipped_inference) {
@@ -609,7 +607,7 @@ static struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_au
            info_out.frames * 1000 / gf->sample_rate);
 
     // prepare output data buffer
-    da_resize(gf->output_data, info_out.frames * gf->channels * sizeof(float));
+    da_resize(gf->output_data, info_out.frames * gf->channels);
 
     // pop from output circlebuf to audio data
     for (size_t i = 0; i < gf->channels; i++) {
@@ -675,8 +673,8 @@ static void cleanstream_update(void *data, obs_data_t *s)
   gf->log_level = (int)obs_data_get_int(s, "log_level");
   gf->do_silence = obs_data_get_bool(s, "do_silence");
   gf->vad_enabled = obs_data_get_bool(s, "vad_enabled");
-  gf->detect_regex = std::string(obs_data_get_string(s, "detect_regex"));
-  gf->beep_regex = std::string(obs_data_get_string(s, "beep_regex"));
+  gf->detect_regex = obs_data_get_string(s, "detect_regex");
+  gf->beep_regex = obs_data_get_string(s, "beep_regex");
   gf->log_words = obs_data_get_bool(s, "log_words");
 
   std::lock_guard<std::mutex> lock(whisper_ctx_mutex);
@@ -685,7 +683,7 @@ static void cleanstream_update(void *data, obs_data_t *s)
     (whisper_sampling_strategy)obs_data_get_int(s, "whisper_sampling_method"));
   gf->whisper_params.duration_ms = BUFFER_SIZE_MSEC;
 
-  gf->whisper_params.initial_prompt = std::string(obs_data_get_string(s, "initial_prompt")).c_str();
+  gf->whisper_params.initial_prompt = obs_data_get_string(s, "initial_prompt");
   gf->whisper_params.n_threads = (int)obs_data_get_int(s, "n_threads");
   gf->whisper_params.n_max_text_ctx = (int)obs_data_get_int(s, "n_max_text_ctx");
   gf->whisper_params.no_context = obs_data_get_bool(s, "no_context");
@@ -723,16 +721,22 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   for (size_t i = 0; i < MAX_AUDIO_CHANNELS; i++) {
     circlebuf_init(&gf->input_buffers[i]);
     circlebuf_init(&gf->output_buffers[i]);
+    gf->output_audio.data[i] = nullptr;
   }
   circlebuf_init(&gf->info_buffer);
   circlebuf_init(&gf->info_out_buffer);
   da_init(gf->output_data);
 
+  gf->output_audio.frames = 0;
+  gf->output_audio.timestamp = 0;
+
   // allocate copy buffers
   gf->copy_buffers[0] = static_cast<float *>(bzalloc(gf->channels * gf->frames * sizeof(float)));
-  for (size_t i = 1; i < gf->channels; i++) { // set the channel pointers
-    gf->copy_buffers[i] = gf->copy_buffers[0] + i * gf->frames;
-    da_init(gf->copy_output_buffers[i]);
+  for (size_t c = 1; c < gf->channels; c++) { // set the channel pointers
+    gf->copy_buffers[c] = gf->copy_buffers[0] + c * gf->frames;
+  }
+  for (size_t c = 0; c < gf->channels; c++) { // initialize the copy-output buffers
+    da_init(gf->copy_output_buffers[c]);
   }
 
   gf->context = filter;
@@ -764,6 +768,8 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
   gf->log_level = (int)obs_data_get_int(settings, "log_level");
   gf->log_words = obs_data_get_bool(settings, "log_words");
   gf->active = true;
+  gf->detect_regex = nullptr;
+  gf->beep_regex = nullptr;
 
   cleanstream_update(gf, settings);
 
@@ -793,14 +799,14 @@ static void cleanstream_defaults(obs_data_t *s)
   obs_data_set_default_bool(s, "do_silence", true);
   obs_data_set_default_bool(s, "vad_enabled", true);
   obs_data_set_default_int(s, "log_level", LOG_DEBUG);
-  obs_data_set_default_string(s, "detect_regex", "\\b(u|a|e)(h|m)[\\.,]*");
-  obs_data_set_default_string(s, "beep_regex", "(fuck)|(shit)");
+  obs_data_set_default_string(s, "detect_regex", "\\b(uh+)|(um+)|(ah+)\\b");
+  obs_data_set_default_string(s, "beep_regex", "(fuck)|(shit)|(bitch)|(cunt)");
   obs_data_set_default_bool(s, "log_words", true);
 
   // Whisper parameters
   obs_data_set_default_int(s, "whisper_sampling_method", WHISPER_SAMPLING_BEAM_SEARCH);
   obs_data_set_default_string(s, "initial_prompt", "uhm, Uh, um, Uhh, um. um... uh. uh... ");
-  obs_data_set_default_int(s, "n_threads", 8);
+  obs_data_set_default_int(s, "n_threads", 4);
   obs_data_set_default_int(s, "n_max_text_ctx", 16384);
   obs_data_set_default_bool(s, "no_context", true);
   obs_data_set_default_bool(s, "single_segment", true);
