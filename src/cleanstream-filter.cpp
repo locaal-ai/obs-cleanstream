@@ -270,8 +270,8 @@ enum DetectionResult {
 	DETECTION_RESULT_BEEP = 4,
 };
 
-int run_whisper_inference(struct cleanstream_data *gf,
-				 const float *pcm32f_data, size_t pcm32f_size)
+int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
+			  size_t pcm32f_size)
 {
 	do_log(gf->log_level, "%s: processing %d samples, %.3f sec, %d threads",
 	       __func__, int(pcm32f_size),
@@ -649,8 +649,8 @@ void whisper_loop(void *data)
 	info("exiting whisper thread");
 }
 
-struct obs_audio_data *
-cleanstream_filter_audio(void *data, struct obs_audio_data *audio)
+struct obs_audio_data *cleanstream_filter_audio(void *data,
+						struct obs_audio_data *audio)
 {
 	if (!audio) {
 		return nullptr;
