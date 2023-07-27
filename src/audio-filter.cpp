@@ -532,7 +532,8 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
 							sinf(2.0f *
 							     (float)M_PI *
 							     440.0f * (float)i /
-							     gf->sample_rate);
+							     (float)gf
+								     ->sample_rate);
 					}
 				}
 			}
@@ -589,9 +590,9 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
 		       (int)duration, gf->overlap_ms);
 	} else if (!skipped_inference) {
 		// try to increase overlap up to 75% of the segment
-		gf->overlap_ms =
-			std::min((uint64_t)gf->overlap_ms + 10,
-				 (uint64_t)(new_frames_from_infos_ms * 0.75f));
+		gf->overlap_ms = std::min(
+			(uint64_t)gf->overlap_ms + 10,
+			(uint64_t)((float)new_frames_from_infos_ms * 0.75f));
 		gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
 		do_log(gf->log_level,
 		       "audio processing took %d ms, increasing overlap to %lu ms",
