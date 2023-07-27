@@ -1,5 +1,4 @@
 #include <obs-module.h>
-#include <media-io/audio-math.h>
 #include <media-io/audio-resampler.h>
 #include <util/circlebuf.h>
 #include <util/darray.h>

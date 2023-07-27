@@ -18,7 +18,8 @@ endif()
 ExternalProject_Add(
   Whispercpp_Build
   DOWNLOAD_EXTRACT_TIMESTAMP true
-  URL https://github.com/ggerganov/whisper.cpp/archive/refs/tags/v1.4.0.tar.gz
+  GIT_REPOSITORY git@github.com:ggerganov/whisper.cpp.git
+  GIT_TAG 7b374c9ac9b9861bb737eec060e4dfa29d229259
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config
                 ${Whispercpp_BUILD_TYPE}
   BUILD_BYPRODUCTS
@@ -35,7 +36,8 @@ ExternalProject_Add(
              -DCMAKE_C_FLAGS=${WHISPER_EXTRA_CXX_FLAGS}
              -DBUILD_SHARED_LIBS=OFF
              -DWHISPER_BUILD_TESTS=OFF
-             -DWHISPER_BUILD_EXAMPLES=OFF)
+             -DWHISPER_BUILD_EXAMPLES=OFF
+             -DWHISPER_OPENBLAS=ON)
 
 ExternalProject_Get_Property(Whispercpp_Build INSTALL_DIR)
 
