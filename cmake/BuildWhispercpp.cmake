@@ -16,7 +16,7 @@ endif()
 ExternalProject_Add(
   Whispercpp_Build
   DOWNLOAD_EXTRACT_TIMESTAMP true
-  GIT_REPOSITORY git@github.com:ggerganov/whisper.cpp.git
+  GIT_REPOSITORY https://github.com/ggerganov/whisper.cpp.git
   GIT_TAG 7b374c9ac9b9861bb737eec060e4dfa29d229259
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config ${Whispercpp_BUILD_TYPE}
   BUILD_BYPRODUCTS <INSTALL_DIR>/lib/static/${CMAKE_STATIC_LIBRARY_PREFIX}whisper${CMAKE_STATIC_LIBRARY_SUFFIX}
