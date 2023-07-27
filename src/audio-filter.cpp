@@ -99,7 +99,7 @@ static void whisper_loop(void *data);
 void high_pass_filter(float *pcmf32, size_t pcm32f_size, float cutoff,
 		      uint32_t sample_rate)
 {
-	const float rc = 1.0f / (2.0f * M_PI * cutoff);
+	const float rc = 1.0f / (2.0f * (float)M_PI * cutoff);
 	const float dt = 1.0f / (float)sample_rate;
 	const float alpha = dt / (rc + dt);
 
@@ -127,7 +127,7 @@ bool vad_simple(float *pcmf32, size_t pcm32f_size, uint32_t sample_rate,
 		energy_all += fabsf(pcmf32[i]);
 	}
 
-	energy_all /= n_samples;
+	energy_all /= (float)n_samples;
 
 	if (verbose) {
 		blog(LOG_INFO,
@@ -149,7 +149,7 @@ float avg_energy_in_window(const float *pcmf32, size_t window_i,
 	for (uint64_t j = 0; j < n_samples_window; j++) {
 		energy_in_window += fabsf(pcmf32[window_i + j]);
 	}
-	energy_in_window /= n_samples_window;
+	energy_in_window /= (float)n_samples_window;
 
 	return energy_in_window;
 }
@@ -529,7 +529,8 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
 						gf->copy_output_buffers[c]
 							.array[i] =
 							0.5f *
-							sinf(2.0f * M_PI *
+							sinf(2.0f *
+							     (float)M_PI *
 							     440.0f * (float)i /
 							     gf->sample_rate);
 					}
@@ -837,7 +838,8 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 	// Get the number of channels for the input source
 	gf->channels = audio_output_get_channels(obs_get_audio());
 	gf->sample_rate = audio_output_get_sample_rate(obs_get_audio());
-	gf->frames = (size_t)(gf->sample_rate / (1000.0f / BUFFER_SIZE_MSEC));
+	gf->frames = (size_t)((float)gf->sample_rate /
+			      (1000.0f / (float)BUFFER_SIZE_MSEC));
 	gf->last_num_frames = 0;
 
 	for (size_t i = 0; i < MAX_AUDIO_CHANNELS; i++) {
@@ -871,8 +873,8 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 	}
 
 	gf->overlap_ms = OVERLAP_SIZE_MSEC;
-	gf->overlap_frames =
-		(size_t)(gf->sample_rate / (1000.0f / gf->overlap_ms));
+	gf->overlap_frames = (size_t)((float)gf->sample_rate /
+				      (1000.0f / (float)gf->overlap_ms));
 	info("CleanStream filter: channels %d, frames %d, sample_rate %d",
 	     (int)gf->channels, (int)gf->frames, gf->sample_rate);
 
