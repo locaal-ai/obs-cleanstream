@@ -37,7 +37,6 @@ endif()
 include(cmake/BuildWhispercpp.cmake)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Whispercpp)
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp
-                                             src/audio-filter.cpp)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/audio-filter.cpp)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
