@@ -27,11 +27,11 @@ MODULE_EXPORT const char *obs_module_description(void)
 	return obs_module_text("CleanStreamFilterPlugin");
 }
 
-extern struct obs_source_info my_audio_filter_info;
+extern struct obs_source_info cleanstream_filter_info;
 
 bool obs_module_load(void)
 {
-	obs_register_source(&my_audio_filter_info);
+	obs_register_source(&cleanstream_filter_info);
 	blog(LOG_INFO, "plugin loaded successfully (version %s)",
 	     PLUGIN_VERSION);
 	return true;

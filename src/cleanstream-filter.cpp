@@ -14,6 +14,8 @@
 
 #include <whisper.h>
 
+#include "cleanstream-filter.h"
+
 #define do_log(level, format, ...)                                  \
 	blog(level, "[cleanstream filter: '%s'] " format, __func__, \
 	     ##__VA_ARGS__)
@@ -94,7 +96,7 @@ std::mutex whisper_buf_mutex;
 std::mutex whisper_outbuf_mutex;
 std::mutex whisper_ctx_mutex;
 
-static void whisper_loop(void *data);
+void whisper_loop(void *data);
 
 void high_pass_filter(float *pcmf32, size_t pcm32f_size, float cutoff,
 		      uint32_t sample_rate)
@@ -211,7 +213,7 @@ size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size,
 	return 0;
 }
 
-static inline enum speaker_layout convert_speaker_layout(uint8_t channels)
+inline enum speaker_layout convert_speaker_layout(uint8_t channels)
 {
 	switch (channels) {
 	case 0:
@@ -235,7 +237,7 @@ static inline enum speaker_layout convert_speaker_layout(uint8_t channels)
 	}
 }
 
-static struct whisper_context *init_whisper_context()
+struct whisper_context *init_whisper_context()
 {
 	struct whisper_context *ctx = whisper_init_from_file(
 		obs_module_file("models/ggml-tiny.en.bin"));
@@ -246,7 +248,7 @@ static struct whisper_context *init_whisper_context()
 	return ctx;
 }
 
-static std::string to_timestamp(int64_t t)
+std::string to_timestamp(int64_t t)
 {
 	int64_t sec = t / 100;
 	int64_t msec = t - sec * 100;
@@ -268,7 +270,7 @@ enum DetectionResult {
 	DETECTION_RESULT_BEEP = 4,
 };
 
-static int run_whisper_inference(struct cleanstream_data *gf,
+int run_whisper_inference(struct cleanstream_data *gf,
 				 const float *pcm32f_data, size_t pcm32f_size)
 {
 	do_log(gf->log_level, "%s: processing %d samples, %.3f sec, %d threads",
@@ -368,7 +370,7 @@ static int run_whisper_inference(struct cleanstream_data *gf,
 	return DETECTION_RESULT_SPEECH;
 }
 
-static void process_audio_from_buffer(struct cleanstream_data *gf)
+void process_audio_from_buffer(struct cleanstream_data *gf)
 {
 	uint32_t num_new_frames_from_infos = 0;
 	uint64_t start_timestamp = 0;
@@ -600,7 +602,7 @@ static void process_audio_from_buffer(struct cleanstream_data *gf)
 	}
 }
 
-static void whisper_loop(void *data)
+void whisper_loop(void *data)
 {
 	struct cleanstream_data *gf =
 		static_cast<struct cleanstream_data *>(data);
@@ -647,7 +649,7 @@ static void whisper_loop(void *data)
 	info("exiting whisper thread");
 }
 
-static struct obs_audio_data *
+struct obs_audio_data *
 cleanstream_filter_audio(void *data, struct obs_audio_data *audio)
 {
 	if (!audio) {
@@ -728,13 +730,13 @@ cleanstream_filter_audio(void *data, struct obs_audio_data *audio)
 	return &gf->output_audio;
 }
 
-static const char *cleanstream_name(void *unused)
+const char *cleanstream_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
 	return MT_("CleanStreamAudioFilter");
 }
 
-static void cleanstream_destroy(void *data)
+void cleanstream_destroy(void *data)
 {
 	struct cleanstream_data *gf =
 		static_cast<struct cleanstream_data *>(data);
@@ -772,7 +774,7 @@ static void cleanstream_destroy(void *data)
 	bfree(gf);
 }
 
-static void cleanstream_update(void *data, obs_data_t *s)
+void cleanstream_update(void *data, obs_data_t *s)
 {
 	struct cleanstream_data *gf =
 		static_cast<struct cleanstream_data *>(data);
@@ -831,7 +833,7 @@ static void cleanstream_update(void *data, obs_data_t *s)
 		(float)obs_data_get_double(s, "length_penalty");
 }
 
-static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
+void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 {
 	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(
 		bmalloc(sizeof(struct cleanstream_data)));
@@ -907,7 +909,7 @@ static void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 	return gf;
 }
 
-static void cleanstream_activate(void *data)
+void cleanstream_activate(void *data)
 {
 	struct cleanstream_data *gf =
 		static_cast<struct cleanstream_data *>(data);
@@ -915,7 +917,7 @@ static void cleanstream_activate(void *data)
 	gf->active = true;
 }
 
-static void cleanstream_deactivate(void *data)
+void cleanstream_deactivate(void *data)
 {
 	struct cleanstream_data *gf =
 		static_cast<struct cleanstream_data *>(data);
@@ -923,7 +925,7 @@ static void cleanstream_deactivate(void *data)
 	gf->active = false;
 }
 
-static void cleanstream_defaults(obs_data_t *s)
+void cleanstream_defaults(obs_data_t *s)
 {
 	obs_data_set_default_double(s, "filler_p_threshold", 0.75);
 	obs_data_set_default_bool(s, "do_silence", true);
@@ -962,7 +964,7 @@ static void cleanstream_defaults(obs_data_t *s)
 	obs_data_set_default_double(s, "length_penalty", -1.0);
 }
 
-static obs_properties_t *cleanstream_properties(void *data)
+obs_properties_t *cleanstream_properties(void *data)
 {
 	obs_properties_t *ppts = obs_properties_create();
 
@@ -1068,18 +1070,3 @@ static obs_properties_t *cleanstream_properties(void *data)
 	UNUSED_PARAMETER(data);
 	return ppts;
 }
-
-struct obs_source_info my_audio_filter_info = {
-	.id = "cleanstream_audio_filter",
-	.type = OBS_SOURCE_TYPE_FILTER,
-	.output_flags = OBS_SOURCE_AUDIO,
-	.get_name = cleanstream_name,
-	.create = cleanstream_create,
-	.destroy = cleanstream_destroy,
-	.get_defaults = cleanstream_defaults,
-	.get_properties = cleanstream_properties,
-	.update = cleanstream_update,
-	.activate = cleanstream_activate,
-	.deactivate = cleanstream_deactivate,
-	.filter_audio = cleanstream_filter_audio,
-};
