@@ -24,6 +24,10 @@ inputs:
     description: 'Developer ID for installer package codesigning (macOS only)'
     required: false
     default: ''
+  codesignTeam:
+    description: 'Developer team for codesigning (macOS only)'
+    required: false
+    default: ''
   codesignUser:
     description: 'Apple ID username for notarization (macOS only)'
     required: false
