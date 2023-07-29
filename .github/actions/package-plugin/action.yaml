@@ -50,6 +50,7 @@ runs:
       env:
         CODESIGN_IDENT: ${{ inputs.codesignIdent }}
         CODESIGN_IDENT_INSTALLER: ${{ inputs.installerIdent }}
+        CODESIGN_TEAM: ${{ inputs.codesignTeam }}
         CODESIGN_IDENT_USER: ${{ inputs.codesignUser }}
         CODESIGN_IDENT_PASS: ${{ inputs.codesignPass }}
       run: |
