@@ -1,5 +1,5 @@
 # obs-cleanstream
-**🚧 EXPERIMENTAL 🚧** 
+**🚧 EXPERIMENTAL 🚧**
 
 CleanStream is an OBS plugin that cleans live audio streams from unwanted words and utterances using AI.
 
@@ -8,7 +8,7 @@ CleanStream is an OBS plugin that cleans live audio streams from unwanted words 
 <div align="center">
 
 [![GitHub](https://img.shields.io/github/license/royshil/obs-cleanstream)](https://github.com/royshil/obs-cleanstream/blob/main/LICENSE)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/royshil/obs-cleanstream/push.yml)](https://github.com/royshil/obs-cleanstream/actions/workflows/push.yml)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/royshil/obs-cleanstream/push.yaml)](https://github.com/royshil/obs-cleanstream/actions/workflows/push.yaml)
 [![Total downloads](https://img.shields.io/github/downloads/royshil/obs-cleanstream/total)](https://github.com/royshil/obs-cleanstream/releases)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/royshil/obs-cleanstream)](https://github.com/royshil/obs-cleanstream/releases)
 
