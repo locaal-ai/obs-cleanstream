@@ -16,6 +16,7 @@
 !LICENSE
 !README.md
 !patch_libobs.diff
+!vendor
 
 # Exclude lock files
 *.lock.json
