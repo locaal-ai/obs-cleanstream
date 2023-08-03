@@ -2,6 +2,7 @@
 #define MODEL_DOWNLOADER_H
 
 #include <string>
+#include <functional>
 
 bool check_if_model_exists(const std::string &model_name);
 

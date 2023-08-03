@@ -2,6 +2,10 @@
 #define MODEL_DOWNLOADER_UI_H
 
 #include <QtWidgets>
+#include <QThread>
+
+#include <string>
+#include <functional>
 
 #include <curl/curl.h>
 
