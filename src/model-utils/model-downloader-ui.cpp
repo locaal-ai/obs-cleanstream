@@ -13,9 +13,9 @@ size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream)
 }
 
 ModelDownloader::ModelDownloader(const std::string &model_name,
-				 std::function<void(int download_status)> download_finished_callback,
+				 std::function<void(int download_status)> download_finished_callback_,
 				 QWidget *parent)
-	: QDialog(parent), download_finished_callback(download_finished_callback)
+	: QDialog(parent), download_finished_callback(download_finished_callback_)
 {
 	this->setWindowTitle("Downloading model...");
 	this->setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::CustomizeWindowHint);
@@ -99,9 +99,9 @@ void ModelDownloader::show_error(const std::string &reason)
 	this->download_finished_callback(1);
 }
 
-ModelDownloadWorker::ModelDownloadWorker(const std::string &model_name)
+ModelDownloadWorker::ModelDownloadWorker(const std::string &model_name_)
 {
-	this->model_name = model_name;
+	this->model_name = model_name_;
 }
 
 void ModelDownloadWorker::download_model()
@@ -161,7 +161,7 @@ int ModelDownloadWorker::progress_callback(void *clientp, curl_off_t dltotal, cu
 		obs_log(LOG_ERROR, "Worker is null.");
 		return 1;
 	}
-	int progress = (int)(dlnow * 100.0f / dltotal);
+	int progress = (int)(dlnow * 100l / dltotal);
 	emit worker->download_progress(progress);
 	return 0;
 }
