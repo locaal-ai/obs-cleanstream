@@ -15,6 +15,7 @@ CleanStream is an OBS plugin that cleans live audio streams from unwanted words 
 Check out our other plugins: 
 - [Background Removal](https://github.com/royshil/obs-backgroundremoval) remove background (virtual green screen) from video
 - ✨ NEW: [URL/API Source](https://github.com/royshil/obs-urlsource) fetch API data and display it on screen as a video source
+- ✨ NEW: [LocalVocal](https://github.com/royshil/obs-localvocal) speech AI assistant plugin for real-time transcription (captions), translation and more language functions
 
 ## Download
 Check out the [latest releases](https://github.com/royshil/obs-cleanstream/releases) for downloads and install instructions.
