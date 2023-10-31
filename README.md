@@ -5,20 +5,21 @@ CleanStream is an OBS plugin that cleans live audio streams from unwanted words 
 
 <div align="center">
 
-[![GitHub](https://img.shields.io/github/license/royshil/obs-cleanstream)](https://github.com/royshil/obs-cleanstream/blob/main/LICENSE)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/royshil/obs-cleanstream/push.yaml)](https://github.com/royshil/obs-cleanstream/actions/workflows/push.yaml)
-[![Total downloads](https://img.shields.io/github/downloads/royshil/obs-cleanstream/total)](https://github.com/royshil/obs-cleanstream/releases)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/royshil/obs-cleanstream)](https://github.com/royshil/obs-cleanstream/releases)
+[![GitHub](https://img.shields.io/github/license/occ-ai/obs-cleanstream)](https://github.com/occ-ai/obs-cleanstream/blob/main/LICENSE)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/occ-ai/obs-cleanstream/push.yaml)](https://github.com/occ-ai/obs-cleanstream/actions/workflows/push.yaml)
+[![Total downloads](https://img.shields.io/github/downloads/occ-ai/obs-cleanstream/total)](https://github.com/occ-ai/obs-cleanstream/releases)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/occ-ai/obs-cleanstream)](https://github.com/occ-ai/obs-cleanstream/releases)
 
 </div>
 
 Check out our other plugins: 
-- [Background Removal](https://github.com/royshil/obs-backgroundremoval) remove background (virtual green screen) from video
-- ✨ NEW: [URL/API Source](https://github.com/royshil/obs-urlsource) fetch API data and display it on screen as a video source
-- ✨ NEW: [LocalVocal](https://github.com/royshil/obs-localvocal) speech AI assistant plugin for real-time transcription (captions), translation and more language functions
+- [Background Removal](https://github.com/occ-ai/obs-backgroundremoval) remove background (virtual green screen) from video
+- [URL/API Source](https://github.com/occ-ai/obs-urlsource) fetch API data and display it on screen as a video source
+- [LocalVocal](https://github.com/occ-ai/obs-localvocal) speech AI assistant plugin for real-time transcription (captions), translation and more language functions
+- ✨ NEW: [PolyGlot](https://github.com/occ-ai/obs-polyglot) a realtime local translation service based on AI.
 
 ## Download
-Check out the [latest releases](https://github.com/royshil/obs-cleanstream/releases) for downloads and install instructions.
+Check out the [latest releases](https://github.com/occ-ai/obs-cleanstream/releases) for downloads and install instructions.
 
 ## Code Walkthrough
 This video walkthrough (YouTube) will explain various parts of the code of you're looking to learn from what I've discovered.
@@ -43,7 +44,7 @@ It's using the [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) project f
 
 ### 🚧🚧🚧 **This plugin is still experimental and is not ready for live production use.** 🚧🚧🚧
 
-But it is working and you can try it out. *Please report any issues you find.* 🙏 ([submit an issue](https://github.com/royshil/obs-cleanstream/issues))
+But it is working and you can try it out. *Please report any issues you find.* 🙏 ([submit an issue](https://github.com/occ-ai/obs-cleanstream/issues))
 
 We're working on improving the plugin and adding more features. If you have any ideas or suggestions, please open an issue.
 
