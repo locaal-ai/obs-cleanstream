@@ -18,6 +18,13 @@
 #include "model-utils/model-downloader.h"
 #include "whisper-utils/whisper-language.h"
 
+#ifdef _WIN32
+#include <fstream>
+#include <Windows.h>
+#endif
+
+#include "plugin-support.h"
+
 #define do_log(level, format, ...) \
 	blog(level, "[cleanstream filter: '%s'] " format, __func__, ##__VA_ARGS__)
 
@@ -160,7 +167,7 @@ float max_energy_in_window(const float *pcmf32, size_t window_i, uint64_t n_samp
 {
 	float energy_in_window = 0.0f;
 	for (uint64_t j = 0; j < n_samples_window; j++) {
-		energy_in_window = std::max(energy_in_window, fabsf(pcmf32[window_i + j]));
+		energy_in_window = max(energy_in_window, fabsf(pcmf32[window_i + j]));
 	}
 
 	return energy_in_window;
@@ -226,9 +233,47 @@ inline enum speaker_layout convert_speaker_layout(uint8_t channels)
 	}
 }
 
-struct whisper_context *init_whisper_context(const std::string &model_path)
+struct whisper_context *init_whisper_context(const std::string &model_path_)
 {
-	struct whisper_context *ctx = whisper_init_from_file(obs_module_file(model_path.c_str()));
+    struct whisper_context_params cparams;
+#ifdef LOCALVOCAL_WITH_CUDA
+	cparams.use_gpu = true;
+#else
+	cparams.use_gpu = false;
+#endif
+
+    char* model_path_ctr = obs_module_file(model_path_.c_str());
+    std::string model_path(model_path_ctr);
+    bfree(model_path_ctr);
+
+#ifdef _WIN32
+	// convert model path UTF8 to wstring (wchar_t) for whisper
+	int count = MultiByteToWideChar(CP_UTF8, 0, model_path.c_str(), (int)model_path.length(),
+					NULL, 0);
+	std::wstring model_path_ws(count, 0);
+	MultiByteToWideChar(CP_UTF8, 0, model_path.c_str(), (int)model_path.length(),
+			    &model_path_ws[0], count);
+
+	// Read model into buffer
+	std::ifstream modelFile(model_path_ws, std::ios::binary);
+	if (!modelFile.is_open()) {
+		obs_log(LOG_ERROR, "Failed to open whisper model file %s", model_path.c_str());
+		return nullptr;
+	}
+	modelFile.seekg(0, std::ios::end);
+	const size_t modelFileSize = modelFile.tellg();
+	modelFile.seekg(0, std::ios::beg);
+	std::vector<char> modelBuffer(modelFileSize);
+	modelFile.read(modelBuffer.data(), modelFileSize);
+	modelFile.close();
+
+	// Initialize whisper
+	struct whisper_context *ctx =
+		whisper_init_from_buffer_with_params(modelBuffer.data(), modelFileSize, cparams);
+#else
+	struct whisper_context *ctx =
+		whisper_init_from_file_with_params(model_path.c_str(), cparams);
+#endif
 	if (ctx == nullptr) {
 		error("Failed to load whisper model");
 		return nullptr;
@@ -519,14 +564,14 @@ void process_audio_from_buffer(struct cleanstream_data *gf)
 
 	if (duration > new_frames_from_infos_ms) {
 		// try to decrease overlap down to minimum of 100 ms
-		gf->overlap_ms = std::max((uint64_t)gf->overlap_ms - 10, (uint64_t)100);
+		gf->overlap_ms = max((uint64_t)gf->overlap_ms - 10, (uint64_t)100);
 		gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
 		do_log(gf->log_level,
 		       "audio processing took too long (%d ms), reducing overlap to %lu ms",
 		       (int)duration, gf->overlap_ms);
 	} else if (!skipped_inference) {
 		// try to increase overlap up to 75% of the segment
-		gf->overlap_ms = std::min((uint64_t)gf->overlap_ms + 10,
+		gf->overlap_ms = min((uint64_t)gf->overlap_ms + 10,
 					  (uint64_t)((float)new_frames_from_infos_ms * 0.75f));
 		gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
 		do_log(gf->log_level, "audio processing took %d ms, increasing overlap to %lu ms",
