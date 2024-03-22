@@ -2,7 +2,13 @@
 #include <media-io/audio-resampler.h>
 #include <util/circlebuf.h>
 #include <util/darray.h>
-#include <math.h>
+
+#ifdef _WIN32
+#include <fstream>
+#define NOMINMAX
+#include <windows.h>
+#undef max
+#endif
 
 #include <string>
 #include <thread>
@@ -17,11 +23,6 @@
 #include "cleanstream-filter.h"
 #include "model-utils/model-downloader.h"
 #include "whisper-utils/whisper-language.h"
-
-#ifdef _WIN32
-#include <fstream>
-#include <Windows.h>
-#endif
 
 #include "plugin-support.h"
 
@@ -167,7 +168,7 @@ float max_energy_in_window(const float *pcmf32, size_t window_i, uint64_t n_samp
 {
 	float energy_in_window = 0.0f;
 	for (uint64_t j = 0; j < n_samples_window; j++) {
-		energy_in_window = max(energy_in_window, fabsf(pcmf32[window_i + j]));
+		energy_in_window = std::max(energy_in_window, fabsf(pcmf32[window_i + j]));
 	}
 
 	return energy_in_window;
@@ -564,15 +565,15 @@ void process_audio_from_buffer(struct cleanstream_data *gf)
 
 	if (duration > new_frames_from_infos_ms) {
 		// try to decrease overlap down to minimum of 100 ms
-		gf->overlap_ms = max((uint64_t)gf->overlap_ms - 10, (uint64_t)100);
+		gf->overlap_ms = std::max((uint64_t)gf->overlap_ms - 10, (uint64_t)100);
 		gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
 		do_log(gf->log_level,
 		       "audio processing took too long (%d ms), reducing overlap to %lu ms",
 		       (int)duration, gf->overlap_ms);
 	} else if (!skipped_inference) {
 		// try to increase overlap up to 75% of the segment
-		gf->overlap_ms = min((uint64_t)gf->overlap_ms + 10,
-				     (uint64_t)((float)new_frames_from_infos_ms * 0.75f));
+		gf->overlap_ms = std::min((uint64_t)gf->overlap_ms + 10,
+					  (uint64_t)((float)new_frames_from_infos_ms * 0.75f));
 		gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
 		do_log(gf->log_level, "audio processing took %d ms, increasing overlap to %lu ms",
 		       (int)duration, gf->overlap_ms);
