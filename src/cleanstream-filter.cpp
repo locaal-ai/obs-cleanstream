@@ -235,16 +235,16 @@ inline enum speaker_layout convert_speaker_layout(uint8_t channels)
 
 struct whisper_context *init_whisper_context(const std::string &model_path_)
 {
-    struct whisper_context_params cparams;
+	struct whisper_context_params cparams;
 #ifdef LOCALVOCAL_WITH_CUDA
 	cparams.use_gpu = true;
 #else
 	cparams.use_gpu = false;
 #endif
 
-    char* model_path_ctr = obs_module_file(model_path_.c_str());
-    std::string model_path(model_path_ctr);
-    bfree(model_path_ctr);
+	char *model_path_ctr = obs_module_file(model_path_.c_str());
+	std::string model_path(model_path_ctr);
+	bfree(model_path_ctr);
 
 #ifdef _WIN32
 	// convert model path UTF8 to wstring (wchar_t) for whisper
@@ -572,7 +572,7 @@ void process_audio_from_buffer(struct cleanstream_data *gf)
 	} else if (!skipped_inference) {
 		// try to increase overlap up to 75% of the segment
 		gf->overlap_ms = min((uint64_t)gf->overlap_ms + 10,
-					  (uint64_t)((float)new_frames_from_infos_ms * 0.75f));
+				     (uint64_t)((float)new_frames_from_infos_ms * 0.75f));
 		gf->overlap_frames = gf->overlap_ms * gf->sample_rate / 1000;
 		do_log(gf->log_level, "audio processing took %d ms, increasing overlap to %lu ms",
 		       (int)duration, gf->overlap_ms);
