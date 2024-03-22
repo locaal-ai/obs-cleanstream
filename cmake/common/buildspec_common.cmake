@@ -75,10 +75,9 @@ function(_setup_obs_studio)
 
   message(STATUS "Patch libobs")
   execute_process(
-    COMMAND patch "${dependencies_dir}/${_obs_destination}/libobs/CMakeLists.txt"
-            "${CMAKE_CURRENT_SOURCE_DIR}/patch_libobs.diff"
-    RESULT_VARIABLE _process_result COMMAND_ERROR_IS_FATAL ANY
-    OUTPUT_QUIET)
+    COMMAND patch --forward "libobs/CMakeLists.txt" "${CMAKE_CURRENT_SOURCE_DIR}/patch_libobs.diff"
+    RESULT_VARIABLE _process_result
+    WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}")
   message(STATUS "Patch - done")
 
   message(STATUS "Configure ${label} (${arch})")

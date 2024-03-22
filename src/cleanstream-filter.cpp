@@ -2,7 +2,13 @@
 #include <media-io/audio-resampler.h>
 #include <util/circlebuf.h>
 #include <util/darray.h>
-#include <math.h>
+
+#ifdef _WIN32
+#include <fstream>
+#define NOMINMAX
+#include <windows.h>
+#undef max
+#endif
 
 #include <string>
 #include <thread>
@@ -17,6 +23,8 @@
 #include "cleanstream-filter.h"
 #include "model-utils/model-downloader.h"
 #include "whisper-utils/whisper-language.h"
+
+#include "plugin-support.h"
 
 #define do_log(level, format, ...) \
 	blog(level, "[cleanstream filter: '%s'] " format, __func__, ##__VA_ARGS__)
@@ -226,9 +234,47 @@ inline enum speaker_layout convert_speaker_layout(uint8_t channels)
 	}
 }
 
-struct whisper_context *init_whisper_context(const std::string &model_path)
+struct whisper_context *init_whisper_context(const std::string &model_path_)
 {
-	struct whisper_context *ctx = whisper_init_from_file(obs_module_file(model_path.c_str()));
+	struct whisper_context_params cparams;
+#ifdef LOCALVOCAL_WITH_CUDA
+	cparams.use_gpu = true;
+#else
+	cparams.use_gpu = false;
+#endif
+
+	char *model_path_ctr = obs_module_file(model_path_.c_str());
+	std::string model_path(model_path_ctr);
+	bfree(model_path_ctr);
+
+#ifdef _WIN32
+	// convert model path UTF8 to wstring (wchar_t) for whisper
+	int count = MultiByteToWideChar(CP_UTF8, 0, model_path.c_str(), (int)model_path.length(),
+					NULL, 0);
+	std::wstring model_path_ws(count, 0);
+	MultiByteToWideChar(CP_UTF8, 0, model_path.c_str(), (int)model_path.length(),
+			    &model_path_ws[0], count);
+
+	// Read model into buffer
+	std::ifstream modelFile(model_path_ws, std::ios::binary);
+	if (!modelFile.is_open()) {
+		obs_log(LOG_ERROR, "Failed to open whisper model file %s", model_path.c_str());
+		return nullptr;
+	}
+	modelFile.seekg(0, std::ios::end);
+	const size_t modelFileSize = modelFile.tellg();
+	modelFile.seekg(0, std::ios::beg);
+	std::vector<char> modelBuffer(modelFileSize);
+	modelFile.read(modelBuffer.data(), modelFileSize);
+	modelFile.close();
+
+	// Initialize whisper
+	struct whisper_context *ctx =
+		whisper_init_from_buffer_with_params(modelBuffer.data(), modelFileSize, cparams);
+#else
+	struct whisper_context *ctx =
+		whisper_init_from_file_with_params(model_path.c_str(), cparams);
+#endif
 	if (ctx == nullptr) {
 		error("Failed to load whisper model");
 		return nullptr;
