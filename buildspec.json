@@ -1,33 +1,33 @@
 {
     "dependencies": {
         "obs-studio": {
-            "version": "29.1.3",
+            "version": "30.0.2",
             "baseUrl": "https://github.com/obsproject/obs-studio/archive/refs/tags",
             "label": "OBS sources",
             "hashes": {
-                "macos": "9d9cfbdbdd255f48a23feeefb60089769a65f52bbca24fa31d74125f3bbb0e90",
-                "windows-x64": "965334470e447dc164801f8812d583260761521e6e3c5ebee1da7cd8f6ec4a95"
+                "macos": "be12c3ad0a85713750d8325e4b1db75086223402d7080d0e3c2833d7c5e83c27",
+                "windows-x64": "970058c49322cfa9cd6d620abb393fed89743ba7e74bd9dbb6ebe0ea8141d9c7"
             }
         },
         "prebuilt": {
-            "version": "2023-06-22",
+            "version": "2023-11-03",
             "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
             "label": "Pre-Built obs-deps",
             "hashes": {
-                "macos": "a0d2e03f0ea79681634c31627430a220d9b62113d6ff58174d0bdab6fafdd32b",
-                "windows-x64": "1b12e86e2d62a97a889866d66b95fe47ddc6f7fa9b13e88aedfab4ea9e298ea2"
+                "macos": "90c2fc069847ec2768dcc867c1c63b112c615ed845a907dc44acab7a97181974",
+                "windows-x64": "d0825a6fb65822c993a3059edfba70d72d2e632ef74893588cf12b1f0d329ce6"
             }
         },
         "qt6": {
-            "version": "2023-06-22",
+            "version": "2023-11-03",
             "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
             "label": "Pre-Built Qt6",
             "hashes": {
-                "macos": "f890d258a1afa7ba409b79c8ee55d53155e5c72105b8b18a3f52047ee70fc0aa",
-                "windows-x64": "1907fbcbcef69527154b29316c425b0885afb77ad69a9a2af7a1471d79512195"
+                "macos": "ba4a7152848da0053f63427a2a2cb0a199af3992997c0db08564df6f48c9db98",
+                "windows-x64": "bc57dedf76b47119a6dce0435a2f21b35b08c8f2948b1cb34a157320f77732d1"
             },
             "debugSymbols": {
-                "windows-x64": "b461a7ade0c099505baea857fa5b98c4f8e9b702681be019ea354735d062e065"
+                "windows-x64": "fd8ecd1d8cd2ef049d9f4d7fb5c134f784836d6020758094855dfa98bd025036"
             }
         }
     },
@@ -45,13 +45,13 @@
         }
     },
     "name": "obs-cleanstream",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "author": "Roy Shilkrot",
-    "website": "https://github.com/royshil/obs-cleanstream/",
+    "website": "https://github.com/occ-ai/obs-cleanstream/",
     "email": "roy.shil@gmail.com",
     "uuids": {
-        "macosPackage": "00000000-0000-0000-0000-000000000000",
-        "macosInstaller": "00000000-0000-0000-0000-000000000000",
-        "windowsApp": "00000000-0000-0000-0000-000000000000"
+        "macosPackage": "b6f62fcf-36d3-4006-8b9a-dc0df1875dda",
+        "macosInstaller": "0e828987-688e-4510-9aee-d39605ce2332",
+        "windowsApp": "39bf1865-9d79-4754-8ce2-150132f47012"
     }
 }

@@ -51,7 +51,13 @@ include(cmake/BuildWhispercpp.cmake)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Whispercpp)
 
 target_sources(
-  ${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.c src/cleanstream-filter.cpp src/cleanstream-filter.c
-                                src/model-utils/model-downloader.cpp src/model-utils/model-downloader-ui.cpp)
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE src/plugin-main.c
+          src/cleanstream-filter.cpp
+          src/cleanstream-filter.c
+          src/model-utils/model-downloader.cpp
+          src/model-utils/model-downloader-ui.cpp
+          src/whisper-utils/whisper-utils.cpp
+          src/whisper-utils/whisper-processing.cpp)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
