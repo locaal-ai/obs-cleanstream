@@ -13,11 +13,23 @@ CleanStream is an OBS plugin that cleans live audio streams from unwanted words 
 
 </div>
 
-Check out our other plugins: 
+Check out our other plugins:
 - [Background Removal](https://github.com/occ-ai/obs-backgroundremoval) remove background (virtual green screen) from video
+- [Detect](https://github.com/occ-ai/obs-detect) will detect and track >80 types of objects in any OBS source
 - [URL/API Source](https://github.com/occ-ai/obs-urlsource) fetch API data and display it on screen as a video source
 - [LocalVocal](https://github.com/occ-ai/obs-localvocal) speech AI assistant plugin for real-time transcription (captions), translation and more language functions
-- ✨ NEW: [PolyGlot](https://github.com/occ-ai/obs-polyglot) a realtime local translation service based on AI.
+- [PolyGlot](https://github.com/occ-ai/obs-polyglot) a realtime local translation service based on AI.
+
+## Usage
+
+- Add the plugin to any audio-generating source
+- Adjust the settings
+
+<div align="center">
+
+[![YouTube Tutorial](thumbnail.png)](https://youtu.be/2rODlj1uOQ8)
+
+</div>
 
 ## Download
 Check out the [latest releases](https://github.com/occ-ai/obs-cleanstream/releases) for downloads and install instructions.
@@ -25,12 +37,16 @@ Check out the [latest releases](https://github.com/occ-ai/obs-cleanstream/releas
 ## Code Walkthrough
 This video walkthrough (YouTube) will explain various parts of the code of you're looking to learn from what I've discovered.
 
-<a href="https://youtu.be/HdSI3sUKwsY" target="_blank">
-  <img width="480" src="https://img.youtube.com/vi/HdSI3sUKwsY/maxresdefault.jpg" />
-</a>
+<div align="center">
+    <a href="https://youtu.be/HdSI3sUKwsY" target="_blank">
+        <img width="480" src="https://img.youtube.com/vi/HdSI3sUKwsY/maxresdefault.jpg" />
+    </a>
+</div>
 
 ## Requirements
-- OBS version 28+ ([download](https://obsproject.com/download))
+- OBS version 30+ for plugin versions 0.0.4+
+- OBS version 29 for plugin versions 0.0.2+
+- OBS version 28 for plugin versions 0.0.1
 
 We do not support older versions of OBS since the plugin is using newer APIs.
 
@@ -45,11 +61,9 @@ It's using the [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) project f
 
 ### 🚧🚧🚧 **This plugin is still experimental and is not ready for live production use.** 🚧🚧🚧
 
-But it is working and you can try it out. *Please report any issues you find.* 🙏 ([submit an issue](https://github.com/occ-ai/obs-cleanstream/issues))
+But it is working and you can try it out. *Please report any issues you find.* 🙏 ([submit an issue](https://github.com/occ-ai/obs-cleanstream/issues) or meet us on https://discord.gg/KbjGU2vvUz)
 
 We're working on improving the plugin and adding more features. If you have any ideas or suggestions, please open an issue.
-
-GPU support is coming soon. Whisper.cpp is using GGML which should have GPU support for major platforms. We will bring it to the plugin when it's ready.
 
 ## Building
 
@@ -88,8 +102,22 @@ $ ./.github/scripts/build-linux.sh
 Use the CI scripts again, for example:
 
 ```powershell
-> .github/scripts/Build-Windows.ps1 -Target x64 -CMakeGenerator "Visual Studio 17 2022"
+> .github/scripts/Build-Windows.ps1 -Configuration Release
 ```
 
-The build should exist in the `./release` folder off the root. You can manually install the files in the OBS directory, e.g. `C:\Program Files\obs-studio\obs-plugins`.
+The build should exist in the `./release` folder off the root. You can manually install the files in the OBS directory.
 
+```powershell
+> Copy-Item -Recurse -Force "release\Release\*" -Destination "C:\Program Files\obs-studio\"
+```
+
+#### Building with CUDA support on Windows
+
+CleanStream will now build with CUDA support automatically through a prebuilt binary of Whisper.cpp from https://github.com/occ-ai/occ-ai-dep-whispercpp. The CMake scripts will download all necessary files.
+
+To build with cuda add `CPU_OR_CUDA` as an environment variable (with `cpu`, `12.2.0` or `11.8.0`) and build regularly
+
+```powershell
+> $env:CPU_OR_CUDA="12.2.0"
+> .github/scripts/Build-Windows.ps1 -Configuration Release
+```
