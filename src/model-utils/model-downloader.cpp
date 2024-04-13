@@ -31,6 +31,83 @@ bool check_if_model_exists(const std::string &model_name)
 	return true;
 }
 
+std::string find_file_in_folder_by_name(const std::string &folder_path,
+					const std::string &file_name)
+{
+	for (const auto &entry : std::filesystem::directory_iterator(folder_path)) {
+		if (entry.path().filename() == file_name) {
+			return entry.path().string();
+		}
+	}
+	return "";
+}
+
+std::string find_bin_file_in_folder(const std::string &model_local_folder_path)
+{
+	// find .bin file in folder
+	for (const auto &entry : std::filesystem::directory_iterator(model_local_folder_path)) {
+		if (entry.path().extension() == ".bin") {
+			const std::string bin_file_path = entry.path().string();
+			obs_log(LOG_INFO, "Model bin file found in folder: %s",
+				bin_file_path.c_str());
+			return bin_file_path;
+		}
+	}
+	obs_log(LOG_ERROR, "Model bin file not found in folder: %s",
+		model_local_folder_path.c_str());
+	return "";
+}
+
+std::string find_model_folder(const std::string &model_name)
+{
+	char *data_folder_models = obs_module_file("models");
+	const std::filesystem::path module_data_models_folder =
+		std::filesystem::absolute(data_folder_models);
+	bfree(data_folder_models);
+
+	const std::string model_local_data_path = (module_data_models_folder / model_name).string();
+
+	obs_log(LOG_INFO, "Checking if model '%s' exists in data...", model_name.c_str());
+
+	if (!std::filesystem::exists(model_local_data_path)) {
+		obs_log(LOG_INFO, "Model not found in data: %s", model_local_data_path.c_str());
+	} else {
+		obs_log(LOG_INFO, "Model folder found in data: %s", model_local_data_path.c_str());
+		return model_local_data_path;
+	}
+
+	// Check if model exists in the config folder
+	char *config_folder = obs_module_get_config_path(obs_current_module(), "models");
+	const std::filesystem::path module_config_models_folder =
+		std::filesystem::absolute(config_folder);
+	bfree(config_folder);
+
+	obs_log(LOG_INFO, "Checking if model '%s' exists in config...", model_name.c_str());
+
+	const std::string model_local_config_path =
+		(module_config_models_folder / model_name).string();
+
+	obs_log(LOG_INFO, "Model path in config: %s", model_local_config_path.c_str());
+	if (std::filesystem::exists(model_local_config_path)) {
+		obs_log(LOG_INFO, "Model exists in config folder: %s",
+			model_local_config_path.c_str());
+		return model_local_config_path;
+	}
+
+	obs_log(LOG_INFO, "Model '%s' not found.", model_name.c_str());
+	return "";
+}
+
+std::string find_model_bin_file(const std::string &model_name)
+{
+	const std::string model_local_folder_path = find_model_folder(model_name);
+	if (model_local_folder_path.empty()) {
+		return "";
+	}
+
+	return find_bin_file_in_folder(model_local_folder_path);
+}
+
 void download_model_with_ui_dialog(
 	const std::string &model_name,
 	std::function<void(int download_status)> download_finished_callback)
