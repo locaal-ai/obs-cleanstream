@@ -62,7 +62,7 @@ elseif(WIN32)
   )
   if($ENV{CPU_OR_CUDA} STREQUAL "cpu")
     set(WHISPER_CPP_HASH "6DE628A51B9352624A1EC397231591FA3370E6BB42D9364F4F91F11DD18F77D2")
-  elseif($ENV{CPU_OR_CUDA} STREQUAL "clablst")
+  elseif($ENV{CPU_OR_CUDA} STREQUAL "clblast")
     set(WHISPER_CPP_HASH "97BF58520F1818B7C9F4E996197F3097934E5E0BBA92B0B016C6B28BE9FF1642")
   elseif($ENV{CPU_OR_CUDA} STREQUAL "12.2.0")
     set(WHISPER_CPP_HASH "48C059A3364E0AAD9FB0D4194BA554865928D22A27ECE5E3C116DC672D5D6EDE")
@@ -71,7 +71,7 @@ elseif(WIN32)
   else()
     message(
       FATAL_ERROR
-        "The CPU_OR_CUDA environment variable is not set to a valid value. Please set it to either `cpu` or `11.8.0` or `12.2.0`"
+        "The CPU_OR_CUDA environment variable is not set to a valid value. Please set it to either `cpu`, `clblast`, `11.8.0` or `12.2.0`"
     )
   endif()
 
