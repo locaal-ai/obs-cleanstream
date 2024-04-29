@@ -45,7 +45,8 @@ elseif(WIN32)
   if(NOT DEFINED ENV{CPU_OR_CUDA})
     message(
       FATAL_ERROR
-        "The CPU_OR_CUDA environment variable is not set. Please set it to either `cpu`, `clblast`, `11.8.0` or `12.2.0`")
+        "The CPU_OR_CUDA environment variable is not set. Please set it to either `cpu`, `clblast`, `11.8.0` or `12.2.0`"
+    )
   endif(NOT DEFINED ENV{CPU_OR_CUDA})
 
   set(CUDA_PREFIX $ENV{CPU_OR_CUDA})
