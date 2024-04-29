@@ -55,7 +55,7 @@ elseif(WIN32)
     add_compile_definitions("LOCALVOCAL_WITH_CUDA")
   elseif($ENV{CPU_OR_CUDA} STREQUAL "clblast")
     set(CUDA_PREFIX "$ENV{CPU_OR_CUDA}")
-    add_compile_definitions("LOCALVOCAL_WITH_CLBLAST")
+    add_compile_definitions("LOCALVOCAL_WITH_OPENCL")
   endif()
 
   set(WHISPER_CPP_URL
