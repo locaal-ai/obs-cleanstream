@@ -127,6 +127,8 @@ struct whisper_context *init_whisper_context(const std::string &model_path_)
 	struct whisper_context_params cparams;
 #ifdef LOCALVOCAL_WITH_CUDA
 	cparams.use_gpu = true;
+#elif defined(LOCALVOCAL_WITH_OPENCL)
+	cparams.use_gpu = true;
 #else
 	cparams.use_gpu = false;
 #endif
@@ -168,14 +170,21 @@ struct whisper_context *init_whisper_context(const std::string &model_path_)
 	std::vector<char> modelBuffer(modelFileSize);
 	modelFile.read(modelBuffer.data(), modelFileSize);
 	modelFile.close();
+#endif // _WIN32
+
+	struct whisper_context *ctx = nullptr;
+	try {
+#ifdef _WIN32
+		ctx = whisper_init_from_buffer_with_params(modelBuffer.data(), modelFileSize,
+							   cparams);
+#else
+		ctx = whisper_init_from_file_with_params(model_path.c_str(), cparams);
+#endif
+	} catch (const std::exception &e) {
+		obs_log(LOG_ERROR, "Whisper exception: %s", e.what());
+	}
 
 	// Initialize whisper
-	struct whisper_context *ctx =
-		whisper_init_from_buffer_with_params(modelBuffer.data(), modelFileSize, cparams);
-#else
-	struct whisper_context *ctx =
-		whisper_init_from_file_with_params(model_path.c_str(), cparams);
-#endif
 	if (ctx == nullptr) {
 		obs_log(LOG_ERROR, "Failed to load whisper model");
 		return nullptr;
