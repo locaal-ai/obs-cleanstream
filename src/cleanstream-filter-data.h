@@ -16,6 +16,14 @@
 
 #define MAX_PREPROC_CHANNELS 2
 
+enum ReplaceSounds {
+	REPLACE_SOUNDS_NONE = 0,
+	REPLACE_SOUNDS_BEEP = 1,
+	REPLACE_SOUNDS_SILENCE = 2,
+	REPLACE_SOUNDS_HORN = 3,
+	REPLACE_SOUNDS_EXTERNAL = 4,
+};
+
 // Audio packet info
 struct cleanstream_audio_info {
 	uint32_t frames;
@@ -69,9 +77,9 @@ struct cleanstream_data {
 	bool vad_enabled;
 	int log_level;
 	const char *detect_regex;
-	const char *beep_regex;
 	bool log_words;
 	bool active;
+	long long replace_sound;
 };
 
 #endif

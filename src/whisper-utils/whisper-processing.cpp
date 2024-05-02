@@ -291,13 +291,6 @@ int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
 				std::regex filler_regex(gf->detect_regex);
 				if (std::regex_search(text_lower, filler_regex,
 						      std::regex_constants::match_any)) {
-					return DETECTION_RESULT_FILLER;
-				}
-			}
-			if (gf->beep_regex != nullptr && strlen(gf->beep_regex) > 0) {
-				std::regex beep_regex(gf->beep_regex);
-				if (std::regex_search(text_lower, beep_regex,
-						      std::regex_constants::match_any)) {
 					return DETECTION_RESULT_BEEP;
 				}
 			}

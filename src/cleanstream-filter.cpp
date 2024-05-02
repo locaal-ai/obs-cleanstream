@@ -135,8 +135,7 @@ struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_dat
 				(uint8_t *)&gf->output_data.array[i * num_frames];
 		}
 
-		if (gf->current_result == DetectionResult::DETECTION_RESULT_FILLER ||
-		    gf->current_result == DetectionResult::DETECTION_RESULT_BEEP) {
+		if (gf->current_result == DetectionResult::DETECTION_RESULT_BEEP) {
 			// set the audio to 0
 			for (size_t i = 0; i < gf->channels; i++) {
 				memset(gf->output_audio.data[i], 0, frames_size_bytes);
@@ -198,12 +197,12 @@ void cleanstream_update(void *data, obs_data_t *s)
 
 	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
 
+	gf->detect_regex = obs_data_get_string(s, "detect_regex");
+	gf->replace_sound = obs_data_get_int(s, "replace_sound");
 	gf->filler_p_threshold = (float)obs_data_get_double(s, "filler_p_threshold");
 	gf->log_level = (int)obs_data_get_int(s, "log_level");
 	gf->do_silence = obs_data_get_bool(s, "do_silence");
 	gf->vad_enabled = obs_data_get_bool(s, "vad_enabled");
-	gf->detect_regex = obs_data_get_string(s, "detect_regex");
-	gf->beep_regex = obs_data_get_string(s, "beep_regex");
 	gf->log_words = obs_data_get_bool(s, "log_words");
 
 	obs_log(gf->log_level, "update whisper model");
@@ -297,7 +296,7 @@ void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 
 	gf->active = true;
 	gf->detect_regex = nullptr;
-	gf->beep_regex = nullptr;
+	gf->replace_sound = REPLACE_SOUNDS_SILENCE;
 
 	// call the update function to set the whisper model
 	cleanstream_update(gf, settings);
@@ -321,11 +320,11 @@ void cleanstream_deactivate(void *data)
 
 void cleanstream_defaults(obs_data_t *s)
 {
-	obs_data_set_default_string(s, "detect_regex", "\\b(uh+|um+)\\.?(\\.{2,})?\\b");
 	// Profane words taken from https://en.wiktionary.org/wiki/Category:English_swear_words
 	obs_data_set_default_string(
-		s, "beep_regex",
+		s, "detect_regex",
 		"(fuck)|(shit)|(bitch)|(cunt)|(pussy)|(dick)|(asshole)|(whore)|(cock)|(nigger)|(nigga)|(prick)");
+	obs_data_set_default_int(s, "replace_sound", REPLACE_SOUNDS_SILENCE);
 	obs_data_set_default_bool(s, "advanced_settings", false);
 	obs_data_set_default_double(s, "filler_p_threshold", 0.75);
 	obs_data_set_default_bool(s, "do_silence", true);
@@ -365,7 +364,31 @@ obs_properties_t *cleanstream_properties(void *data)
 	obs_properties_t *ppts = obs_properties_create();
 
 	obs_properties_add_text(ppts, "detect_regex", MT_("detect_regex"), OBS_TEXT_DEFAULT);
-	obs_properties_add_text(ppts, "beep_regex", MT_("beep_regex"), OBS_TEXT_DEFAULT);
+
+	// Add a lift of available replace sounds
+	obs_property_t *replace_sounds_list =
+		obs_properties_add_list(ppts, "replace_sound", MT_("replace_sound"),
+					OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(replace_sounds_list, "None", REPLACE_SOUNDS_NONE);
+	obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_NONE);
+	obs_property_list_add_int(replace_sounds_list, "Silence", REPLACE_SOUNDS_SILENCE);
+	obs_property_list_add_int(replace_sounds_list, "Horn", REPLACE_SOUNDS_HORN);
+	obs_property_list_add_int(replace_sounds_list, "External", REPLACE_SOUNDS_EXTERNAL);
+
+	// add external file path for replace sound
+	obs_properties_add_path(ppts, "replace_sound_path", MT_("replace_sound_path"),
+				OBS_PATH_FILE, "WAV files (*.wav);;All files (*.*)", nullptr);
+
+	// show/hide external file path based on the selected replace sound
+	obs_property_set_modified_callback(replace_sounds_list, [](obs_properties_t *props,
+								   obs_property_t *property,
+								   obs_data_t *settings) {
+		UNUSED_PARAMETER(property);
+		const long long replace_sound = obs_data_get_int(settings, "replace_sound");
+		obs_property_set_visible(obs_properties_get(props, "replace_sound_path"),
+					 replace_sound == REPLACE_SOUNDS_EXTERNAL);
+		return true;
+	});
 
 	// Add a list of available whisper models to download
 	obs_property_t *whisper_models_list =
