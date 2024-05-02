@@ -9,10 +9,12 @@
 
 #include <curl/curl.h>
 
+#include "model-downloader-types.h"
+
 class ModelDownloadWorker : public QObject {
 	Q_OBJECT
 public:
-	ModelDownloadWorker(const std::string &model_name);
+	ModelDownloadWorker(const ModelInfo &model_info_);
 	~ModelDownloadWorker();
 
 public slots:
@@ -20,27 +22,30 @@ public slots:
 
 signals:
 	void download_progress(int progress);
-	void download_finished();
+	void download_finished(const std::string &path);
 	void download_error(const std::string &reason);
 
 private:
 	static int progress_callback(void *clientp, curl_off_t dltotal, curl_off_t dlnow,
 				     curl_off_t ultotal, curl_off_t ulnow);
-	std::string model_name;
+	ModelInfo model_info;
 };
 
 class ModelDownloader : public QDialog {
 	Q_OBJECT
 public:
-	ModelDownloader(const std::string &model_name,
-			std::function<void(int download_status)> download_finished_callback,
+	ModelDownloader(const ModelInfo &model_info,
+			download_finished_callback_t download_finished_callback,
 			QWidget *parent = nullptr);
 	~ModelDownloader();
 
 public slots:
 	void update_progress(int progress);
-	void download_finished();
+	void download_finished(const std::string &path);
 	void show_error(const std::string &reason);
+
+protected:
+	void closeEvent(QCloseEvent *e) override;
 
 private:
 	QVBoxLayout *layout;
@@ -48,7 +53,9 @@ private:
 	QThread *download_thread;
 	ModelDownloadWorker *download_worker;
 	// Callback for when the download is finished
-	std::function<void(int download_status)> download_finished_callback;
+	download_finished_callback_t download_finished_callback;
+	bool mPrepareToClose;
+	void close();
 };
 
 #endif // MODEL_DOWNLOADER_UI_H

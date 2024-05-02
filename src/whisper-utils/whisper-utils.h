@@ -7,7 +7,7 @@
 
 #include <string>
 
-void update_whsiper_model_path(struct cleanstream_data *gf, obs_data_t *s);
+void update_whisper_model(struct cleanstream_data *gf, obs_data_t *s);
 void shutdown_whisper_thread(struct cleanstream_data *gf);
 void start_whisper_thread_with_path(struct cleanstream_data *gf, const std::string &path);
 

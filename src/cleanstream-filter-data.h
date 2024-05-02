@@ -10,6 +10,8 @@
 #include <util/darray.h>
 #include <media-io/audio-resampler.h>
 
+#include "whisper-utils/silero-vad-onnx.h"
+
 #include <whisper.h>
 
 #define MAX_PREPROC_CHANNELS 2
@@ -31,14 +33,15 @@ struct cleanstream_data {
 	size_t overlap_ms;
 	// How many frames were processed in the last whisper frame (this is dynamic)
 	size_t last_num_frames;
+	int current_result;
+
+	/* Silero VAD */
+	std::unique_ptr<VadIterator> vad;
 
 	/* PCM buffers */
 	float *copy_buffers[MAX_PREPROC_CHANNELS];
-	DARRAY(float) copy_output_buffers[MAX_PREPROC_CHANNELS];
 	struct circlebuf info_buffer;
-	struct circlebuf info_out_buffer;
 	struct circlebuf input_buffers[MAX_PREPROC_CHANNELS];
-	struct circlebuf output_buffers[MAX_PREPROC_CHANNELS];
 
 	/* Resampler */
 	audio_resampler_t *resampler;
