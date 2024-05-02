@@ -101,18 +101,12 @@ struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_dat
 		// find needed number of frames from the incoming audio
 		size_t num_frames_needed = audio->frames;
 
-		gf->output_audio.timestamp = 0;
-
 		std::vector<float> temporary_buffers[MAX_AUDIO_CHANNELS];
 
 		while (temporary_buffers[0].size() < num_frames_needed) {
 			struct cleanstream_audio_info info_out = {0};
 			// pop from input buffers to get audio packet info
 			circlebuf_pop_front(&gf->info_buffer, &info_out, sizeof(info_out));
-			if (gf->output_audio.timestamp == 0) {
-				// the first packet, set the timestamp
-				gf->output_audio.timestamp = info_out.timestamp;
-			}
 
 			// pop from input circlebuf to audio data
 			for (size_t i = 0; i < gf->channels; i++) {
@@ -150,6 +144,7 @@ struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_dat
 		}
 
 		gf->output_audio.frames = (uint32_t)num_frames;
+		gf->output_audio.timestamp = audio->timestamp;
 
 		return &gf->output_audio;
 	}
