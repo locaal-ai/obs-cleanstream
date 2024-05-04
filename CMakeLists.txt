@@ -36,16 +36,11 @@ endif()
 
 function(find_libav)
   if(UNIX AND NOT APPLE)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(
-      LIBAV
-      REQUIRED
-      IMPORTED_TARGET
-      libavcodec
-      libavformat
-      libavutil
-      libswresample)
-    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE PkgConfig::LIBAV)
+    find_package(FFmpeg REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
+    if(FFMPEG_FOUND)
+      include_directories(${FFMPEG_INCLUDE_DIRS})
+      target_link_libraries(your_target ${FFMPEG_LIBRARIES})
+    endif()
     return()
   endif()
 
