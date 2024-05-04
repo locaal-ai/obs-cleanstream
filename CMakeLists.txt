@@ -35,12 +35,12 @@ if(ENABLE_QT)
 endif()
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/include")
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
-    "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/avcodec.lib"
-    "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/avformat.lib"
-    "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/avutil.lib"
-    "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/swresample.lib"
-    )
+target_link_libraries(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/avcodec.lib"
+          "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/avformat.lib"
+          "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/avutil.lib"
+          "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/swresample.lib")
 
 set(USE_SYSTEM_CURL
     OFF
