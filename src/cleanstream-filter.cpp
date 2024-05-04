@@ -426,6 +426,7 @@ obs_properties_t *cleanstream_properties(void *data)
 		[](void *data, obs_properties_t *props, obs_property_t *property,
 		   obs_data_t *settings) {
 			UNUSED_PARAMETER(property);
+			UNUSED_PARAMETER(props);
 			struct cleanstream_data *gf_ = static_cast<struct cleanstream_data *>(data);
 			// load the sound file and cache it
 			std::string replace_sound_path_ =
