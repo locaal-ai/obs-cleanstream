@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <regex>
 #include <functional>
+#include <filesystem>
 
 #include <whisper.h>
 
@@ -39,30 +40,6 @@
 #define MT_ obs_module_text
 
 void whisper_loop(void *data);
-
-inline enum speaker_layout convert_speaker_layout(uint8_t channels)
-{
-	switch (channels) {
-	case 0:
-		return SPEAKERS_UNKNOWN;
-	case 1:
-		return SPEAKERS_MONO;
-	case 2:
-		return SPEAKERS_STEREO;
-	case 3:
-		return SPEAKERS_2POINT1;
-	case 4:
-		return SPEAKERS_4POINT0;
-	case 5:
-		return SPEAKERS_4POINT1;
-	case 6:
-		return SPEAKERS_5POINT1;
-	case 8:
-		return SPEAKERS_7POINT1;
-	default:
-		return SPEAKERS_UNKNOWN;
-	}
-}
 
 struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_data *audio)
 {
@@ -128,18 +105,53 @@ struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_dat
 		da_resize(gf->output_data, frames_size_bytes * gf->channels);
 		memset(gf->output_data.array, 0, frames_size_bytes * gf->channels);
 
+		if (gf->current_result == DetectionResult::DETECTION_RESULT_BEEP) {
+			if (gf->replace_sound == REPLACE_SOUNDS_SILENCE) {
+				// set the audio to 0
+				for (size_t i = 0; i < gf->channels; i++) {
+					temporary_buffers[i].clear();
+					temporary_buffers[i].resize(num_frames, 0.0f);
+				}
+			} else if (gf->replace_sound == REPLACE_SOUNDS_HORN ||
+				   gf->replace_sound == REPLACE_SOUNDS_BEEP ||
+				   gf->replace_sound == REPLACE_SOUNDS_EXTERNAL) {
+
+				std::string replace_audio_name =
+					gf->replace_sound == REPLACE_SOUNDS_HORN   ? "horn.wav"
+					: gf->replace_sound == REPLACE_SOUNDS_BEEP ? "beep.wav"
+					: gf->replace_sound == REPLACE_SOUNDS_EXTERNAL
+						? gf->replace_sound_external
+						: "";
+
+				if (replace_audio_name != "") {
+					// replace the audio with beep or horn sound
+					const AudioDataFloat &replace_audio =
+						gf->audioFileCache[replace_audio_name];
+					if ((gf->audioFilePointer + num_frames) >=
+					    replace_audio.size()) {
+						gf->audioFilePointer = 0;
+					}
+					for (size_t i = 0; i < gf->channels; i++) {
+						temporary_buffers[i].clear();
+						temporary_buffers[i].insert(
+							temporary_buffers[i].end(),
+							replace_audio.begin() +
+								gf->audioFilePointer,
+							replace_audio.begin() +
+								gf->audioFilePointer + num_frames);
+					}
+					gf->audioFilePointer += num_frames;
+				}
+			}
+		} else {
+			gf->audioFilePointer = 0;
+		}
+
 		for (size_t i = 0; i < gf->channels; i++) {
 			memcpy(gf->output_data.array + i * num_frames, temporary_buffers[i].data(),
 			       frames_size_bytes);
 			gf->output_audio.data[i] =
 				(uint8_t *)&gf->output_data.array[i * num_frames];
-		}
-
-		if (gf->current_result == DetectionResult::DETECTION_RESULT_BEEP) {
-			// set the audio to 0
-			for (size_t i = 0; i < gf->channels; i++) {
-				memset(gf->output_audio.data[i], 0, frames_size_bytes);
-			}
 		}
 
 		gf->output_audio.frames = (uint32_t)num_frames;
@@ -159,32 +171,26 @@ const char *cleanstream_name(void *unused)
 
 void cleanstream_destroy(void *data)
 {
+	obs_log(LOG_INFO, "cleanstream_destroy");
 	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
 
-	obs_log(LOG_INFO, "cleanstream_destroy");
-	{
-		std::lock_guard<std::mutex> lock(gf->whisper_ctx_mutex);
-		if (gf->whisper_context != nullptr) {
-			whisper_free(gf->whisper_context);
-			gf->whisper_context = nullptr;
-		}
-	}
-	// join the thread
-	gf->whisper_thread.join();
+	gf->active = false;
+
+	shutdown_whisper_thread(gf);
 
 	if (gf->resampler) {
 		audio_resampler_destroy(gf->resampler);
-		audio_resampler_destroy(gf->resampler_back);
 	}
+
 	{
 		std::lock_guard<std::mutex> lockbuf(gf->whisper_buf_mutex);
-		std::lock_guard<std::mutex> lockoutbuf(gf->whisper_outbuf_mutex);
 		bfree(gf->copy_buffers[0]);
 		gf->copy_buffers[0] = nullptr;
 		for (size_t i = 0; i < gf->channels; i++) {
 			circlebuf_free(&gf->input_buffers[i]);
 		}
 	}
+
 	circlebuf_free(&gf->info_buffer);
 	da_free(gf->output_data);
 
@@ -292,11 +298,32 @@ void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 	dst.speakers = convert_speaker_layout((uint8_t)1);
 
 	gf->resampler = audio_resampler_create(&dst, &src);
-	gf->resampler_back = audio_resampler_create(&src, &dst);
 
 	gf->active = true;
 	gf->detect_regex = nullptr;
 	gf->replace_sound = REPLACE_SOUNDS_SILENCE;
+	gf->replace_sound_external = "";
+
+	// get absolute path of the audio files
+	char *module_data_sounds_folder_path = obs_module_file("sounds");
+	std::filesystem::path sounds_folder_path =
+		std::filesystem::absolute(module_data_sounds_folder_path);
+	bfree(module_data_sounds_folder_path);
+
+	// load audio files to cache
+	for (const auto &file_name : {"beep.wav", "horn.wav"}) {
+		std::filesystem::path audio_file_path_fs = sounds_folder_path / file_name;
+		obs_log(LOG_INFO, "Loading audio file: %s", audio_file_path_fs.string().c_str());
+		AudioDataFloat audioFile =
+			read_audio_file(audio_file_path_fs.string().c_str(), gf->sample_rate);
+		obs_log(LOG_INFO, "Loaded %lu frames of audio data", audioFile.size());
+		if (audioFile.empty()) {
+			obs_log(LOG_ERROR, "Failed to load audio file: %s",
+				audio_file_path_fs.string().c_str());
+			return nullptr;
+		}
+		gf->audioFileCache[file_name] = audioFile;
+	}
 
 	// call the update function to set the whisper model
 	cleanstream_update(gf, settings);
@@ -361,6 +388,9 @@ void cleanstream_defaults(obs_data_t *s)
 
 obs_properties_t *cleanstream_properties(void *data)
 {
+	UNUSED_PARAMETER(data);
+	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
+
 	obs_properties_t *ppts = obs_properties_create();
 
 	obs_properties_add_text(ppts, "detect_regex", MT_("detect_regex"), OBS_TEXT_DEFAULT);
@@ -370,14 +400,15 @@ obs_properties_t *cleanstream_properties(void *data)
 		obs_properties_add_list(ppts, "replace_sound", MT_("replace_sound"),
 					OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 	obs_property_list_add_int(replace_sounds_list, "None", REPLACE_SOUNDS_NONE);
-	obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_NONE);
+	obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_BEEP);
 	obs_property_list_add_int(replace_sounds_list, "Silence", REPLACE_SOUNDS_SILENCE);
 	obs_property_list_add_int(replace_sounds_list, "Horn", REPLACE_SOUNDS_HORN);
 	obs_property_list_add_int(replace_sounds_list, "External", REPLACE_SOUNDS_EXTERNAL);
 
 	// add external file path for replace sound
-	obs_properties_add_path(ppts, "replace_sound_path", MT_("replace_sound_path"),
-				OBS_PATH_FILE, "WAV files (*.wav);;All files (*.*)", nullptr);
+	obs_property_t *replace_sound_path = obs_properties_add_path(
+		ppts, "replace_sound_path", MT_("replace_sound_path"), OBS_PATH_FILE,
+		"WAV files (*.wav);;All files (*.*)", nullptr);
 
 	// show/hide external file path based on the selected replace sound
 	obs_property_set_modified_callback(replace_sounds_list, [](obs_properties_t *props,
@@ -389,6 +420,34 @@ obs_properties_t *cleanstream_properties(void *data)
 					 replace_sound == REPLACE_SOUNDS_EXTERNAL);
 		return true;
 	});
+
+	obs_property_set_modified_callback2(
+		replace_sound_path,
+		[](void *data, obs_properties_t *props, obs_property_t *property,
+		   obs_data_t *settings) {
+			UNUSED_PARAMETER(property);
+			struct cleanstream_data *gf_ = static_cast<struct cleanstream_data *>(data);
+			// load the sound file and cache it
+			std::string replace_sound_path_ =
+				obs_data_get_string(settings, "replace_sound_path");
+			if (replace_sound_path_.empty()) {
+				return true;
+			}
+			obs_log(LOG_INFO, "Loading audio file: %s", replace_sound_path_.c_str());
+			AudioDataFloat audioFile =
+				read_audio_file(replace_sound_path_.c_str(), gf_->sample_rate);
+			obs_log(LOG_INFO, "Loaded %lu frames of audio data", audioFile.size());
+			if (audioFile.empty()) {
+				obs_log(LOG_ERROR, "Failed to load audio file: %s",
+					replace_sound_path_.c_str());
+				obs_data_set_string(settings, "replace_sound_path", "");
+				return true;
+			}
+			gf_->audioFileCache[replace_sound_path_] = audioFile;
+			gf_->replace_sound_external = replace_sound_path_;
+			return true;
+		},
+		gf);
 
 	// Add a list of available whisper models to download
 	obs_property_t *whisper_models_list =
@@ -507,6 +566,5 @@ obs_properties_t *cleanstream_properties(void *data)
 	obs_properties_add_float_slider(whisper_params_group, "length_penalty",
 					MT_("length_penalty"), -1.0f, 1.0f, 0.1f);
 
-	UNUSED_PARAMETER(data);
 	return ppts;
 }

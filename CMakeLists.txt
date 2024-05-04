@@ -34,6 +34,14 @@ if(ENABLE_QT)
                AUTORCC ON)
 endif()
 
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/include")
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
+    "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/avcodec.lib"
+    "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/avformat.lib"
+    "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/avutil.lib"
+    "${CMAKE_SOURCE_DIR}/.deps/obs-deps-2023-11-03-x64/lib/swresample.lib"
+    )
+
 set(USE_SYSTEM_CURL
     OFF
     CACHE STRING "Use system cURL")
@@ -82,6 +90,7 @@ target_sources(
   PRIVATE src/plugin-main.c
           src/cleanstream-filter.cpp
           src/cleanstream-filter.c
+          src/audio-utils/read-audio-file.cpp
           src/model-utils/model-downloader.cpp
           src/model-utils/model-downloader-ui.cpp
           src/model-utils/model-infos.cpp

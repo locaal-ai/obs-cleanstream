@@ -5,12 +5,14 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include <map>
 
 #include <util/circlebuf.h>
 #include <util/darray.h>
 #include <media-io/audio-resampler.h>
 
 #include "whisper-utils/silero-vad-onnx.h"
+#include "audio-utils/read-audio-file.h"
 
 #include <whisper.h>
 
@@ -53,7 +55,6 @@ struct cleanstream_data {
 
 	/* Resampler */
 	audio_resampler_t *resampler;
-	audio_resampler_t *resampler_back;
 
 	/* whisper */
 	std::string whisper_model_path = "models/ggml-tiny.en.bin";
@@ -71,8 +72,10 @@ struct cleanstream_data {
 	struct obs_audio_data output_audio;
 	DARRAY(float) output_data;
 
-	float filler_p_threshold;
+	std::map<std::string, AudioDataFloat> audioFileCache;
+	size_t audioFilePointer = 0;
 
+	float filler_p_threshold;
 	bool do_silence;
 	bool vad_enabled;
 	int log_level;
@@ -80,6 +83,7 @@ struct cleanstream_data {
 	bool log_words;
 	bool active;
 	long long replace_sound;
+	std::string replace_sound_external;
 };
 
 #endif
