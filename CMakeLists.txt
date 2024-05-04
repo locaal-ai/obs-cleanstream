@@ -35,6 +35,20 @@ if(ENABLE_QT)
 endif()
 
 function(find_libav)
+  if(UNIX AND NOT APPLE)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(
+      LIBAV
+      REQUIRED
+      IMPORTED_TARGET
+      libavcodec
+      libavformat
+      libavutil
+      libswresample)
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE PkgConfig::LIBAV)
+    return()
+  endif()
+
   if(NOT buildspec)
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/buildspec.json" buildspec)
   endif()
