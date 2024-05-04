@@ -36,10 +36,19 @@ endif()
 
 function(find_libav)
   if(UNIX AND NOT APPLE)
-    find_package(FFmpeg REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(
+      FFMPEG
+      REQUIRED
+      IMPORTED_TARGET
+      libavformat
+      libavcodec
+      libavutil
+      libswresample)
     if(FFMPEG_FOUND)
-      include_directories(${FFMPEG_INCLUDE_DIRS})
-      target_link_libraries(your_target ${FFMPEG_LIBRARIES})
+      target_link_libraries(your_target PkgConfig::FFMPEG)
+    else()
+      message(FATAL_ERROR "FFMPEG not found!")
     endif()
     return()
   endif()
