@@ -58,16 +58,18 @@ std::string find_bin_file_in_folder(const std::string &model_local_folder_path)
 	return "";
 }
 
-std::string find_model_folder(const std::string &model_name)
+std::string find_model_folder(const ModelInfo &model_info)
 {
 	char *data_folder_models = obs_module_file("models");
 	const std::filesystem::path module_data_models_folder =
 		std::filesystem::absolute(data_folder_models);
 	bfree(data_folder_models);
 
-	const std::string model_local_data_path = (module_data_models_folder / model_name).string();
+	const std::string model_local_data_path =
+		(module_data_models_folder / model_info.local_folder_name).string();
 
-	obs_log(LOG_INFO, "Checking if model '%s' exists in data...", model_name.c_str());
+	obs_log(LOG_INFO, "Checking if model '%s' exists in data...",
+		model_info.friendly_name.c_str());
 
 	if (!std::filesystem::exists(model_local_data_path)) {
 		obs_log(LOG_INFO, "Model not found in data: %s", model_local_data_path.c_str());
@@ -82,10 +84,11 @@ std::string find_model_folder(const std::string &model_name)
 		std::filesystem::absolute(config_folder);
 	bfree(config_folder);
 
-	obs_log(LOG_INFO, "Checking if model '%s' exists in config...", model_name.c_str());
+	obs_log(LOG_INFO, "Checking if model '%s' exists in config...",
+		model_info.friendly_name.c_str());
 
 	const std::string model_local_config_path =
-		(module_config_models_folder / model_name).string();
+		(module_config_models_folder / model_info.local_folder_name).string();
 
 	obs_log(LOG_INFO, "Model path in config: %s", model_local_config_path.c_str());
 	if (std::filesystem::exists(model_local_config_path)) {
@@ -94,13 +97,13 @@ std::string find_model_folder(const std::string &model_name)
 		return model_local_config_path;
 	}
 
-	obs_log(LOG_INFO, "Model '%s' not found.", model_name.c_str());
+	obs_log(LOG_INFO, "Model '%s' not found.", model_info.friendly_name.c_str());
 	return "";
 }
 
-std::string find_model_bin_file(const std::string &model_name)
+std::string find_model_bin_file(const ModelInfo &model_info)
 {
-	const std::string model_local_folder_path = find_model_folder(model_name);
+	const std::string model_local_folder_path = find_model_folder(model_info);
 	if (model_local_folder_path.empty()) {
 		return "";
 	}
@@ -108,12 +111,11 @@ std::string find_model_bin_file(const std::string &model_name)
 	return find_bin_file_in_folder(model_local_folder_path);
 }
 
-void download_model_with_ui_dialog(
-	const std::string &model_name,
-	std::function<void(int download_status)> download_finished_callback)
+void download_model_with_ui_dialog(const ModelInfo &model_info,
+				   download_finished_callback_t download_finished_callback)
 {
 	// Start the model downloader UI
 	ModelDownloader *model_downloader = new ModelDownloader(
-		model_name, download_finished_callback, (QWidget *)obs_frontend_get_main_window());
+		model_info, download_finished_callback, (QWidget *)obs_frontend_get_main_window());
 	model_downloader->show();
 }

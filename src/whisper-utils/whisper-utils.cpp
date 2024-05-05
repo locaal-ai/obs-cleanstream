@@ -4,8 +4,9 @@
 #include "whisper-processing.h"
 
 #include <obs-module.h>
+#include <filesystem>
 
-void update_whsiper_model_path(struct cleanstream_data *gf, obs_data_t *s)
+void update_whisper_model(struct cleanstream_data *gf, obs_data_t *s)
 {
 	// update the whisper model path
 	std::string new_model_path = obs_data_get_string(s, "whisper_model_path");
@@ -13,29 +14,38 @@ void update_whsiper_model_path(struct cleanstream_data *gf, obs_data_t *s)
 
 	if (gf->whisper_model_path.empty() || gf->whisper_model_path != new_model_path ||
 	    is_external_model) {
-		// model path changed, reload the model
-		obs_log(gf->log_level, "model path changed from %s to %s",
-			gf->whisper_model_path.c_str(), new_model_path.c_str());
+
+		if (gf->whisper_model_path != new_model_path) {
+			// model path changed
+			obs_log(gf->log_level, "model path changed from %s to %s",
+				gf->whisper_model_path.c_str(), new_model_path.c_str());
+		}
 
 		// check if the new model is external file
 		if (!is_external_model) {
 			// new model is not external file
 			shutdown_whisper_thread(gf);
 
+			if (models_info.count(new_model_path) == 0) {
+				obs_log(LOG_WARNING, "Model '%s' does not exist",
+					new_model_path.c_str());
+				return;
+			}
+
+			const ModelInfo &model_info = models_info[new_model_path];
+
 			// check if the model exists, if not, download it
-			std::string model_file_found = find_model_bin_file(new_model_path);
+			std::string model_file_found = find_model_bin_file(model_info);
 			if (model_file_found == "") {
 				obs_log(LOG_WARNING, "Whisper model does not exist");
 				download_model_with_ui_dialog(
-					new_model_path, [gf, new_model_path](int download_status) {
+					model_info, [gf, new_model_path](int download_status,
+									 const std::string &path) {
 						if (download_status == 0) {
 							obs_log(LOG_INFO,
 								"Model download complete");
 							gf->whisper_model_path = new_model_path;
-							std::string model_download_path =
-								find_model_bin_file(new_model_path);
-							start_whisper_thread_with_path(
-								gf, model_download_path);
+							start_whisper_thread_with_path(gf, path);
 						} else {
 							obs_log(LOG_ERROR, "Model download failed");
 						}
@@ -98,18 +108,30 @@ void start_whisper_thread_with_path(struct cleanstream_data *gf, const std::stri
 		return;
 	}
 
-	// 	// initialize Silero VAD
-	// 	char *silero_vad_model_file = obs_module_file("models/silero-vad/silero_vad.onnx");
-	// #ifdef _WIN32
-	// 	std::wstring silero_vad_model_path;
-	// 	silero_vad_model_path.assign(silero_vad_model_file,
-	// 				     silero_vad_model_file + strlen(silero_vad_model_file));
-	// #else
-	// 	std::string silero_vad_model_path = silero_vad_model_file;
-	// #endif
-	// 	gf->vad.reset(new VadIterator(silero_vad_model_path, WHISPER_SAMPLE_RATE));
+	// initialize Silero VAD
+	char *data_folder_models = obs_module_file("models");
+	if (data_folder_models == nullptr) {
+		obs_log(LOG_ERROR, "Failed to find models folder");
+		return;
+	}
+	const std::filesystem::path module_data_models_folder =
+		std::filesystem::absolute(data_folder_models);
+	bfree(data_folder_models);
+#ifdef _WIN32
+	std::wstring silero_vad_model_path =
+		module_data_models_folder.wstring() + L"\\silero-vad\\silero_vad.onnx";
+	obs_log(gf->log_level, "silero vad model path: %ls", silero_vad_model_path.c_str());
+#else
+	std::string silero_vad_model_path =
+		module_data_models_folder.string() + "/silero-vad/silero_vad.onnx";
+	obs_log(gf->log_level, "silero vad model path: %s", silero_vad_model_path.c_str());
+#endif
+	// roughly following https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/vad.py
+	// for silero vad parameters
+	gf->vad.reset(new VadIterator(silero_vad_model_path, WHISPER_SAMPLE_RATE, 64, 0.5f, 1000,
+				      200, 250));
 
-	gf->whisper_context = init_whisper_context(path);
+	gf->whisper_context = init_whisper_context(path, gf);
 	if (gf->whisper_context == nullptr) {
 		obs_log(LOG_ERROR, "Failed to initialize whisper context");
 		return;

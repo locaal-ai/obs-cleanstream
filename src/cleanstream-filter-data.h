@@ -5,14 +5,26 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include <map>
 
 #include <util/circlebuf.h>
 #include <util/darray.h>
 #include <media-io/audio-resampler.h>
 
+#include "whisper-utils/silero-vad-onnx.h"
+#include "audio-utils/read-audio-file.h"
+
 #include <whisper.h>
 
 #define MAX_PREPROC_CHANNELS 2
+
+enum ReplaceSounds {
+	REPLACE_SOUNDS_NONE = 0,
+	REPLACE_SOUNDS_BEEP = 1,
+	REPLACE_SOUNDS_SILENCE = 2,
+	REPLACE_SOUNDS_HORN = 3,
+	REPLACE_SOUNDS_EXTERNAL = 4,
+};
 
 // Audio packet info
 struct cleanstream_audio_info {
@@ -31,18 +43,18 @@ struct cleanstream_data {
 	size_t overlap_ms;
 	// How many frames were processed in the last whisper frame (this is dynamic)
 	size_t last_num_frames;
+	int current_result;
+
+	/* Silero VAD */
+	std::unique_ptr<VadIterator> vad;
 
 	/* PCM buffers */
 	float *copy_buffers[MAX_PREPROC_CHANNELS];
-	DARRAY(float) copy_output_buffers[MAX_PREPROC_CHANNELS];
 	struct circlebuf info_buffer;
-	struct circlebuf info_out_buffer;
 	struct circlebuf input_buffers[MAX_PREPROC_CHANNELS];
-	struct circlebuf output_buffers[MAX_PREPROC_CHANNELS];
 
 	/* Resampler */
 	audio_resampler_t *resampler;
-	audio_resampler_t *resampler_back;
 
 	/* whisper */
 	std::string whisper_model_path = "models/ggml-tiny.en.bin";
@@ -60,15 +72,18 @@ struct cleanstream_data {
 	struct obs_audio_data output_audio;
 	DARRAY(float) output_data;
 
-	float filler_p_threshold;
+	std::map<std::string, AudioDataFloat> audioFileCache;
+	size_t audioFilePointer = 0;
 
+	float filler_p_threshold;
 	bool do_silence;
 	bool vad_enabled;
 	int log_level;
 	const char *detect_regex;
-	const char *beep_regex;
 	bool log_words;
 	bool active;
+	long long replace_sound;
+	std::string replace_sound_external;
 };
 
 #endif
