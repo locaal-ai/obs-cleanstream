@@ -46,7 +46,7 @@ function(find_libav)
       libavutil
       libswresample)
     if(FFMPEG_FOUND)
-      target_link_libraries(your_target PkgConfig::FFMPEG)
+      target_link_libraries(${CMAKE_PROJECT_NAME} PkgConfig::FFMPEG)
     else()
       message(FATAL_ERROR "FFMPEG not found!")
     endif()
