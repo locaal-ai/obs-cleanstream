@@ -403,7 +403,10 @@ obs_properties_t *cleanstream_properties(void *data)
 	obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_BEEP);
 	obs_property_list_add_int(replace_sounds_list, "Silence", REPLACE_SOUNDS_SILENCE);
 	obs_property_list_add_int(replace_sounds_list, "Horn", REPLACE_SOUNDS_HORN);
+	// on windows and mac, add external file path for replace sound
+#if defined(_WIN32) || defined(__APPLE__)
 	obs_property_list_add_int(replace_sounds_list, "External", REPLACE_SOUNDS_EXTERNAL);
+#endif
 
 	// add external file path for replace sound
 	obs_property_t *replace_sound_path = obs_properties_add_path(
@@ -423,11 +426,12 @@ obs_properties_t *cleanstream_properties(void *data)
 
 	obs_property_set_modified_callback2(
 		replace_sound_path,
-		[](void *data, obs_properties_t *props, obs_property_t *property,
+		[](void *data_, obs_properties_t *props, obs_property_t *property,
 		   obs_data_t *settings) {
 			UNUSED_PARAMETER(property);
 			UNUSED_PARAMETER(props);
-			struct cleanstream_data *gf_ = static_cast<struct cleanstream_data *>(data);
+			struct cleanstream_data *gf_ =
+				static_cast<struct cleanstream_data *>(data_);
 			// load the sound file and cache it
 			std::string replace_sound_path_ =
 				obs_data_get_string(settings, "replace_sound_path");

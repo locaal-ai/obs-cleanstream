@@ -1,3 +1,5 @@
+#if defined(_WIN32) || defined(__APPLE__)
+
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
@@ -131,3 +133,5 @@ AudioDataFloat read_audio_file(const char *filename, int targetSampleRate)
 
 	return audioFrames;
 }
+
+#endif

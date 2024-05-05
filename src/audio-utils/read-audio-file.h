@@ -30,6 +30,8 @@ inline enum speaker_layout convert_speaker_layout(uint8_t channels)
 
 typedef std::vector<float> AudioDataFloat;
 
+#if defined(_WIN32) || defined(__APPLE__)
 AudioDataFloat read_audio_file(const char *filename, int targetSampleRate = 48000);
+#endif
 
 #endif // READ_AUDIO_FILE_H
