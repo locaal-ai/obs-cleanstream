@@ -391,7 +391,6 @@ void cleanstream_defaults(obs_data_t *s)
 obs_properties_t *cleanstream_properties(void *data)
 {
 	UNUSED_PARAMETER(data);
-	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
 
 	obs_properties_t *ppts = obs_properties_create();
 
@@ -408,7 +407,6 @@ obs_properties_t *cleanstream_properties(void *data)
 	obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_BEEP);
 	obs_property_list_add_int(replace_sounds_list, "Horn", REPLACE_SOUNDS_HORN);
 	obs_property_list_add_int(replace_sounds_list, "External", REPLACE_SOUNDS_EXTERNAL);
-#endif
 
 	// add external file path for replace sound
 	obs_property_t *replace_sound_path = obs_properties_add_path(
@@ -426,7 +424,8 @@ obs_properties_t *cleanstream_properties(void *data)
 		return true;
 	});
 
-#if defined(_WIN32) || defined(__APPLE__)
+	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
+
 	obs_property_set_modified_callback2(
 		replace_sound_path,
 		[](void *data_, obs_properties_t *props, obs_property_t *property,
