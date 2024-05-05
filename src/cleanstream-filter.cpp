@@ -310,6 +310,7 @@ void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 		std::filesystem::absolute(module_data_sounds_folder_path);
 	bfree(module_data_sounds_folder_path);
 
+#if defined(_WIN32) || defined(__APPLE__)
 	// load audio files to cache
 	for (const auto &file_name : {"beep.wav", "horn.wav"}) {
 		std::filesystem::path audio_file_path_fs = sounds_folder_path / file_name;
@@ -324,6 +325,7 @@ void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 		}
 		gf->audioFileCache[file_name] = audioFile;
 	}
+#endif
 
 	// call the update function to set the whisper model
 	cleanstream_update(gf, settings);
@@ -400,11 +402,11 @@ obs_properties_t *cleanstream_properties(void *data)
 		obs_properties_add_list(ppts, "replace_sound", MT_("replace_sound"),
 					OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 	obs_property_list_add_int(replace_sounds_list, "None", REPLACE_SOUNDS_NONE);
-	obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_BEEP);
 	obs_property_list_add_int(replace_sounds_list, "Silence", REPLACE_SOUNDS_SILENCE);
-	obs_property_list_add_int(replace_sounds_list, "Horn", REPLACE_SOUNDS_HORN);
 	// on windows and mac, add external file path for replace sound
 #if defined(_WIN32) || defined(__APPLE__)
+	obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_BEEP);
+	obs_property_list_add_int(replace_sounds_list, "Horn", REPLACE_SOUNDS_HORN);
 	obs_property_list_add_int(replace_sounds_list, "External", REPLACE_SOUNDS_EXTERNAL);
 #endif
 
@@ -424,6 +426,7 @@ obs_properties_t *cleanstream_properties(void *data)
 		return true;
 	});
 
+#if defined(_WIN32) || defined(__APPLE__)
 	obs_property_set_modified_callback2(
 		replace_sound_path,
 		[](void *data_, obs_properties_t *props, obs_property_t *property,
@@ -453,6 +456,7 @@ obs_properties_t *cleanstream_properties(void *data)
 			return true;
 		},
 		gf);
+#endif
 
 	// Add a list of available whisper models to download
 	obs_property_t *whisper_models_list =
