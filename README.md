@@ -27,7 +27,7 @@ Check out our other plugins:
 
 <div align="center">
 
-[![YouTube Tutorial](thumbnail.png)](https://youtu.be/2rODlj1uOQ8)
+<a href="https://youtu.be/vgcK3K654FU"><img src="https://github.com/occ-ai/obs-cleanstream/assets/441170/59f0038a-4e0e-47ed-afb8-110acd463146" width="40%" /></a>
 
 </div>
 
