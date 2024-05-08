@@ -1,7 +1,6 @@
 # obs-cleanstream
-**🚧 EXPERIMENTAL 🚧**
 
-CleanStream is an OBS plugin that cleans live audio streams from unwanted words and utterances using AI.
+CleanStream is an OBS plugin that cleans live audio streams from unwanted words and utterances using real-time local AI.
 
 <div align="center">
 
@@ -58,8 +57,6 @@ See our [resource on the OBS Forums](https://obsproject.com/forum/resources/clea
 It is using a neural network ([OpenAI Whisper](https://github.com/openai/whisper)) to predict in real time the speech and remove the unwanted words.
 
 It's using the [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) project from [ggerganov](https://github.com/ggerganov) to run the Whisper network in a very efficient way.
-
-### 🚧🚧🚧 **This plugin is still experimental and is not ready for live production use.** 🚧🚧🚧
 
 But it is working and you can try it out. *Please report any issues you find.* 🙏 ([submit an issue](https://github.com/occ-ai/obs-cleanstream/issues) or meet us on https://discord.gg/KbjGU2vvUz)
 
