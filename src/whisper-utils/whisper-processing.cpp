@@ -349,8 +349,7 @@ long long process_audio_from_buffer(struct cleanstream_data *gf)
 
 		std::vector<timestamp_t> stamps = gf->vad->get_speech_timestamps();
 		if (stamps.size() == 0) {
-			obs_log(gf->log_level, "VAD detected no speech in %d frames",
-				whisper_buffer_16khz);
+			obs_log(gf->log_level, "VAD detected no speech");
 			skipped_inference = true;
 		}
 	}
@@ -364,6 +363,7 @@ long long process_audio_from_buffer(struct cleanstream_data *gf)
 			gf->current_result = inference_result;
 		}
 	} else {
+		gf->current_result = DETECTION_RESULT_SILENCE;
 		if (gf->log_words) {
 			obs_log(LOG_INFO, "skipping inference");
 		}
@@ -376,6 +376,15 @@ long long process_audio_from_buffer(struct cleanstream_data *gf)
 		(uint32_t)gf->frames * 1000u / gf->sample_rate; // number of frames in this packet
 	obs_log(gf->log_level, "audio processing of %u ms new data took %d ms", audio_processed_ms,
 		(int)duration);
+
+	if ((duration + 300) > (gf->delay_ms - audio_processed_ms)) {
+		obs_log(gf->log_level,
+			"audio processing (%d ms) longer than delay (%lu ms), increase delay",
+			(int)duration, gf->delay_ms);
+		gf->delay_ms += 100;
+	} else {
+		gf->delay_ms -= 100;
+	}
 
 	return duration;
 }

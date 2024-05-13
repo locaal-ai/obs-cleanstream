@@ -31,8 +31,8 @@
 #define BUFFER_SIZE_MSEC 1010
 // at 16Khz, 1010 msec is 16160 frames
 #define WHISPER_FRAME_SIZE 16160
-// overlap in msec
-#define OVERLAP_SIZE_MSEC 340
+// initial delay in msec
+#define INITIAL_DELAY_MSEC 500
 
 #define VAD_THOLD 0.0001f
 #define FREQ_THOLD 100.0f
@@ -73,17 +73,21 @@ struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_dat
 		circlebuf_push_back(&gf->info_buffer, &info, sizeof(info));
 	}
 
-	// check the size of the input buffer - if it's more than 1500ms worth of audio, start playback
-	if (gf->input_buffers[0].size > 1500 * gf->sample_rate * sizeof(float) / 1000) {
+	// check the size of the input buffer - if it's more than <delay>ms worth of audio, start playback
+	if (gf->input_buffers[0].size > gf->delay_ms * gf->sample_rate * sizeof(float) / 1000) {
 		// find needed number of frames from the incoming audio
 		size_t num_frames_needed = audio->frames;
 
 		std::vector<float> temporary_buffers[MAX_AUDIO_CHANNELS];
+		uint64_t timestamp = 0;
 
 		while (temporary_buffers[0].size() < num_frames_needed) {
 			struct cleanstream_audio_info info_out = {0};
 			// pop from input buffers to get audio packet info
 			circlebuf_pop_front(&gf->info_buffer, &info_out, sizeof(info_out));
+			if (timestamp == 0) {
+				timestamp = info_out.timestamp;
+			}
 
 			// pop from input circlebuf to audio data
 			for (size_t i = 0; i < gf->channels; i++) {
@@ -105,7 +109,14 @@ struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_dat
 		da_resize(gf->output_data, frames_size_bytes * gf->channels);
 		memset(gf->output_data.array, 0, frames_size_bytes * gf->channels);
 
-		if (gf->current_result == DetectionResult::DETECTION_RESULT_BEEP) {
+		int inference_result = DetectionResult::DETECTION_RESULT_UNKNOWN;
+		{
+			std::lock_guard<std::mutex> lock(gf->whisper_outbuf_mutex);
+			inference_result = gf->current_result;
+		}
+
+		if (inference_result == DetectionResult::DETECTION_RESULT_BEEP) {
+			obs_log(LOG_INFO, "Beep detected, timestamp: %llu", timestamp);
 			if (gf->replace_sound == REPLACE_SOUNDS_SILENCE) {
 				// set the audio to 0
 				for (size_t i = 0; i < gf->channels; i++) {
@@ -207,7 +218,6 @@ void cleanstream_update(void *data, obs_data_t *s)
 	gf->replace_sound = obs_data_get_int(s, "replace_sound");
 	gf->filler_p_threshold = (float)obs_data_get_double(s, "filler_p_threshold");
 	gf->log_level = (int)obs_data_get_int(s, "log_level");
-	gf->do_silence = obs_data_get_bool(s, "do_silence");
 	gf->vad_enabled = obs_data_get_bool(s, "vad_enabled");
 	gf->log_words = obs_data_get_bool(s, "log_words");
 
@@ -261,6 +271,7 @@ void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 	gf->sample_rate = audio_output_get_sample_rate(obs_get_audio());
 	gf->frames = (size_t)((float)gf->sample_rate / (1000.0f / (float)BUFFER_SIZE_MSEC));
 	gf->last_num_frames = 0;
+	gf->delay_ms = BUFFER_SIZE_MSEC + INITIAL_DELAY_MSEC;
 
 	for (size_t i = 0; i < MAX_AUDIO_CHANNELS; i++) {
 		circlebuf_init(&gf->input_buffers[i]);
@@ -283,10 +294,8 @@ void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 	gf->whisper_model_path = std::string(""); // The update function will set the model path
 	gf->whisper_context = nullptr;
 
-	gf->overlap_ms = OVERLAP_SIZE_MSEC;
-	gf->overlap_frames = (size_t)((float)gf->sample_rate / (1000.0f / (float)gf->overlap_ms));
-	obs_log(LOG_INFO, "CleanStream filter: channels %d, frames %d, sample_rate %d",
-		(int)gf->channels, (int)gf->frames, gf->sample_rate);
+	obs_log(LOG_INFO, "CleanStream filter: channels %d, sample_rate %d", (int)gf->channels,
+		gf->sample_rate);
 
 	struct resample_info src, dst;
 	src.samples_per_sec = gf->sample_rate;
@@ -356,7 +365,6 @@ void cleanstream_defaults(obs_data_t *s)
 	obs_data_set_default_int(s, "replace_sound", REPLACE_SOUNDS_SILENCE);
 	obs_data_set_default_bool(s, "advanced_settings", false);
 	obs_data_set_default_double(s, "filler_p_threshold", 0.75);
-	obs_data_set_default_bool(s, "do_silence", true);
 	obs_data_set_default_bool(s, "vad_enabled", true);
 	obs_data_set_default_int(s, "log_level", LOG_DEBUG);
 	obs_data_set_default_bool(s, "log_words", false);
@@ -365,10 +373,10 @@ void cleanstream_defaults(obs_data_t *s)
 
 	// Whisper parameters
 	obs_data_set_default_int(s, "whisper_sampling_method", WHISPER_SAMPLING_BEAM_SEARCH);
-	obs_data_set_default_string(s, "initial_prompt", "uhm, Uh, um, Uhh, um. um... uh. uh... ");
+	obs_data_set_default_string(s, "initial_prompt", "");
 	obs_data_set_default_int(s, "n_threads", 4);
 	obs_data_set_default_int(s, "n_max_text_ctx", 16384);
-	obs_data_set_default_bool(s, "no_context", true);
+	obs_data_set_default_bool(s, "no_context", false);
 	obs_data_set_default_bool(s, "single_segment", true);
 	obs_data_set_default_bool(s, "print_special", false);
 	obs_data_set_default_bool(s, "print_progress", false);
@@ -379,7 +387,7 @@ void cleanstream_defaults(obs_data_t *s)
 	obs_data_set_default_double(s, "thold_ptsum", 0.01);
 	obs_data_set_default_int(s, "max_len", 0);
 	obs_data_set_default_bool(s, "split_on_word", false);
-	obs_data_set_default_int(s, "max_tokens", 3);
+	obs_data_set_default_int(s, "max_tokens", 7);
 	obs_data_set_default_bool(s, "speed_up", false);
 	obs_data_set_default_bool(s, "suppress_blank", true);
 	obs_data_set_default_bool(s, "suppress_non_speech_tokens", true);
@@ -479,8 +487,8 @@ obs_properties_t *cleanstream_properties(void *data)
 		// If advanced settings is enabled, show the advanced settings group
 		const bool show_hide = obs_data_get_bool(settings, "advanced_settings");
 		for (const std::string &prop_name :
-		     {"whisper_params_group", "log_words", "filler_p_threshold", "do_silence",
-		      "vad_enabled", "log_level"}) {
+		     {"whisper_params_group", "log_words", "filler_p_threshold", "vad_enabled",
+		      "log_level"}) {
 			obs_property_set_visible(obs_properties_get(props, prop_name.c_str()),
 						 show_hide);
 		}
@@ -489,7 +497,6 @@ obs_properties_t *cleanstream_properties(void *data)
 
 	obs_properties_add_float_slider(ppts, "filler_p_threshold", MT_("filler_p_threshold"), 0.0f,
 					1.0f, 0.05f);
-	obs_properties_add_bool(ppts, "do_silence", MT_("do_silence"));
 	obs_properties_add_bool(ppts, "vad_enabled", MT_("vad_enabled"));
 	obs_property_t *list = obs_properties_add_list(ppts, "log_level", MT_("log_level"),
 						       OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);

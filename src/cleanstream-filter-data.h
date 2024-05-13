@@ -38,12 +38,10 @@ struct cleanstream_data {
 	uint32_t sample_rate;  // input sample rate
 	// How many input frames (in input sample rate) are needed for the next whisper frame
 	size_t frames;
-	// How many ms/frames are needed to overlap with the next whisper frame
-	size_t overlap_frames;
-	size_t overlap_ms;
 	// How many frames were processed in the last whisper frame (this is dynamic)
 	size_t last_num_frames;
 	int current_result;
+	uint32_t delay_ms;
 
 	/* Silero VAD */
 	std::unique_ptr<VadIterator> vad;
@@ -76,7 +74,6 @@ struct cleanstream_data {
 	size_t audioFilePointer = 0;
 
 	float filler_p_threshold;
-	bool do_silence;
 	bool vad_enabled;
 	int log_level;
 	const char *detect_regex;
