@@ -38,9 +38,9 @@ struct cleanstream_data {
 	uint32_t sample_rate;  // input sample rate
 	// How many input frames (in input sample rate) are needed for the next whisper frame
 	size_t frames;
-	// How many frames were processed in the last whisper frame (this is dynamic)
-	size_t last_num_frames;
 	int current_result;
+	uint64_t current_result_end_timestamp;
+	uint64_t current_result_start_timestamp;
 	uint32_t delay_ms;
 
 	/* Silero VAD */

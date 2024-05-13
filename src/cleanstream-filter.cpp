@@ -58,48 +58,56 @@ struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_dat
 		return audio;
 	}
 
-	std::lock_guard<std::mutex> lock(gf->whisper_buf_mutex); // scoped lock
+	size_t input_buffer_size = 0;
+	{
+		std::lock_guard<std::mutex> lock(gf->whisper_buf_mutex); // scoped lock
 
-	if (audio != nullptr && audio->frames > 0) {
-		// push back current audio data to input circlebuf
-		for (size_t c = 0; c < gf->channels; c++) {
-			circlebuf_push_back(&gf->input_buffers[c], audio->data[c],
-					    audio->frames * sizeof(float));
+		if (audio != nullptr && audio->frames > 0) {
+			// push back current audio data to input circlebuf
+			for (size_t c = 0; c < gf->channels; c++) {
+				circlebuf_push_back(&gf->input_buffers[c], audio->data[c],
+						    audio->frames * sizeof(float));
+			}
+			// push audio packet info (timestamp/frame count) to info circlebuf
+			struct cleanstream_audio_info info = {0};
+			info.frames = audio->frames;       // number of frames in this packet
+			info.timestamp = audio->timestamp; // timestamp of this packet
+			circlebuf_push_back(&gf->info_buffer, &info, sizeof(info));
 		}
-		// push audio packet info (timestamp/frame count) to info circlebuf
-		struct cleanstream_audio_info info = {0};
-		info.frames = audio->frames;       // number of frames in this packet
-		info.timestamp = audio->timestamp; // timestamp of this packet
-		circlebuf_push_back(&gf->info_buffer, &info, sizeof(info));
+		input_buffer_size = gf->input_buffers[0].size;
 	}
 
 	// check the size of the input buffer - if it's more than <delay>ms worth of audio, start playback
-	if (gf->input_buffers[0].size > gf->delay_ms * gf->sample_rate * sizeof(float) / 1000) {
+	if (input_buffer_size > gf->delay_ms * gf->sample_rate * sizeof(float) / 1000) {
 		// find needed number of frames from the incoming audio
 		size_t num_frames_needed = audio->frames;
 
 		std::vector<float> temporary_buffers[MAX_AUDIO_CHANNELS];
 		uint64_t timestamp = 0;
 
-		while (temporary_buffers[0].size() < num_frames_needed) {
-			struct cleanstream_audio_info info_out = {0};
+		{
+			std::lock_guard<std::mutex> lock(gf->whisper_buf_mutex);
 			// pop from input buffers to get audio packet info
-			circlebuf_pop_front(&gf->info_buffer, &info_out, sizeof(info_out));
-			if (timestamp == 0) {
-				timestamp = info_out.timestamp;
-			}
+			while (temporary_buffers[0].size() < num_frames_needed) {
+				struct cleanstream_audio_info info_out = {0};
+				// pop from input buffers to get audio packet info
+				circlebuf_pop_front(&gf->info_buffer, &info_out, sizeof(info_out));
+				if (timestamp == 0) {
+					timestamp = info_out.timestamp;
+				}
 
-			// pop from input circlebuf to audio data
-			for (size_t i = 0; i < gf->channels; i++) {
-				// increase the size of the temporary buffer to hold the incoming audio in addition
-				// to the existing audio on the temporary buffer
-				temporary_buffers[i].resize(temporary_buffers[i].size() +
-							    info_out.frames);
-				circlebuf_pop_front(&gf->input_buffers[i],
-						    temporary_buffers[i].data() +
-							    temporary_buffers[i].size() -
-							    info_out.frames,
-						    info_out.frames * sizeof(float));
+				// pop from input circlebuf to audio data
+				for (size_t i = 0; i < gf->channels; i++) {
+					// increase the size of the temporary buffer to hold the incoming audio in addition
+					// to the existing audio on the temporary buffer
+					temporary_buffers[i].resize(temporary_buffers[i].size() +
+								    info_out.frames);
+					circlebuf_pop_front(&gf->input_buffers[i],
+							    temporary_buffers[i].data() +
+								    temporary_buffers[i].size() -
+								    info_out.frames,
+							    info_out.frames * sizeof(float));
+				}
 			}
 		}
 		const size_t num_frames = temporary_buffers[0].size();
@@ -110,13 +118,17 @@ struct obs_audio_data *cleanstream_filter_audio(void *data, struct obs_audio_dat
 		memset(gf->output_data.array, 0, frames_size_bytes * gf->channels);
 
 		int inference_result = DetectionResult::DETECTION_RESULT_UNKNOWN;
+		uint64_t inference_result_start_timestamp = 0;
+		uint64_t inference_result_end_timestamp = 0;
 		{
-			std::lock_guard<std::mutex> lock(gf->whisper_outbuf_mutex);
+			std::lock_guard<std::mutex> outbuf_lock(gf->whisper_outbuf_mutex);
 			inference_result = gf->current_result;
+			inference_result_start_timestamp = gf->current_result_start_timestamp;
+			inference_result_end_timestamp = gf->current_result_end_timestamp;
 		}
 
-		if (inference_result == DetectionResult::DETECTION_RESULT_BEEP) {
-			obs_log(LOG_INFO, "Beep detected, timestamp: %llu", timestamp);
+		if (timestamp > inference_result_start_timestamp &&
+		    timestamp < inference_result_end_timestamp) {
 			if (gf->replace_sound == REPLACE_SOUNDS_SILENCE) {
 				// set the audio to 0
 				for (size_t i = 0; i < gf->channels; i++) {
@@ -220,6 +232,10 @@ void cleanstream_update(void *data, obs_data_t *s)
 	gf->log_level = (int)obs_data_get_int(s, "log_level");
 	gf->vad_enabled = obs_data_get_bool(s, "vad_enabled");
 	gf->log_words = obs_data_get_bool(s, "log_words");
+	gf->delay_ms = BUFFER_SIZE_MSEC + INITIAL_DELAY_MSEC;
+	gf->current_result = DetectionResult::DETECTION_RESULT_UNKNOWN;
+	gf->current_result_start_timestamp = 0;
+	gf->current_result_end_timestamp = 0;
 
 	obs_log(gf->log_level, "update whisper model");
 	update_whisper_model(gf, s);
@@ -270,8 +286,10 @@ void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 	gf->channels = audio_output_get_channels(obs_get_audio());
 	gf->sample_rate = audio_output_get_sample_rate(obs_get_audio());
 	gf->frames = (size_t)((float)gf->sample_rate / (1000.0f / (float)BUFFER_SIZE_MSEC));
-	gf->last_num_frames = 0;
 	gf->delay_ms = BUFFER_SIZE_MSEC + INITIAL_DELAY_MSEC;
+	gf->current_result = DetectionResult::DETECTION_RESULT_UNKNOWN;
+	gf->current_result_start_timestamp = 0;
+	gf->current_result_end_timestamp = 0;
 
 	for (size_t i = 0; i < MAX_AUDIO_CHANNELS; i++) {
 		circlebuf_init(&gf->input_buffers[i]);
