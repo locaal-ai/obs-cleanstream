@@ -33,14 +33,22 @@ Check out our other plugins:
 ## Download
 Check out the [latest releases](https://github.com/occ-ai/obs-cleanstream/releases) for downloads and install instructions.
 
-## Code Walkthrough
-This video walkthrough (YouTube) will explain various parts of the code of you're looking to learn from what I've discovered.
+## Method
+This video walkthrough (YouTube) will explain various parts of the code if you're looking to learn from what I've discovered.
 
 <div align="center">
     <a href="https://youtu.be/HdSI3sUKwsY" target="_blank">
         <img width="480" src="https://img.youtube.com/vi/HdSI3sUKwsY/maxresdefault.jpg" />
     </a>
 </div>
+
+### Audio processing
+
+The filter is running Whisper in real-time to detect words in small chunks of the incoming audio. For each chunck it produces a decision which then determines if the audio rendering will play the original audio or e.g. a beep or silence. The processing happens in a separate thread and therefore there's a built-in lag/delay mechanism to make sure the audio decision (play, beep, silence) is in-sync with the actual audio playback based on the timestamp. The built-in delay is adaptive since some systems (e.g. with CUDA) can make faster decisions.
+
+Here is an illustration of the process:
+
+![alt text](docs/image.png)
 
 ## Requirements
 - OBS version 30+ for plugin versions 0.0.4+
@@ -118,3 +126,6 @@ To build with cuda add `CPU_OR_CUDA` as an environment variable (with `cpu`, `12
 > $env:CPU_OR_CUDA="12.2.0"
 > .github/scripts/Build-Windows.ps1 -Configuration Release
 ```
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=occ-ai/obs-cleanstream&type=Date)](https://star-history.com/#occ-ai/obs-cleanstream&Date)
