@@ -305,6 +305,7 @@ int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
 long long process_audio_from_buffer(struct cleanstream_data *gf)
 {
 	uint64_t start_timestamp = 0;
+	uint64_t end_timestamp = 0;
 
 	{
 		// scoped lock the buffer mutex
@@ -312,19 +313,23 @@ long long process_audio_from_buffer(struct cleanstream_data *gf)
 
 		// copy gf->frames from the end of the input buffer to the copy_buffers
 		for (size_t c = 0; c < gf->channels; c++) {
-			circlebuf_peek_front(&gf->input_buffers[c], gf->copy_buffers[c],
-					     gf->frames * sizeof(float));
+			circlebuf_peek_back(&gf->input_buffers[c], gf->copy_buffers[c],
+					    gf->frames * sizeof(float));
 		}
 
-		// peek at the info_buffer to get the timestamp of the first info
+		// peek at the info_buffer to get the timestamp of the last info
 		struct cleanstream_audio_info info_from_buf = {0};
-		circlebuf_peek_front(&gf->info_buffer, &info_from_buf,
-				     sizeof(struct cleanstream_audio_info));
-		start_timestamp = info_from_buf.timestamp;
+		circlebuf_peek_back(&gf->info_buffer, &info_from_buf,
+				    sizeof(struct cleanstream_audio_info));
+		end_timestamp = info_from_buf.timestamp;
+		start_timestamp =
+			end_timestamp - (int)(gf->frames * 1000 / gf->sample_rate) * 1000000;
 	}
 
-	obs_log(gf->log_level, "processing %lu frames (%d ms), start timestamp %llu ", gf->frames,
-		(int)(gf->frames * 1000 / gf->sample_rate), start_timestamp);
+	obs_log(gf->log_level,
+		"processing %lu frames (%d ms), start timestamp %llu, end timestamp %llu ",
+		gf->frames, (int)(gf->frames * 1000 / gf->sample_rate), start_timestamp,
+		end_timestamp);
 
 	// time the audio processing
 	auto start = std::chrono::high_resolution_clock::now();
@@ -349,8 +354,7 @@ long long process_audio_from_buffer(struct cleanstream_data *gf)
 
 		std::vector<timestamp_t> stamps = gf->vad->get_speech_timestamps();
 		if (stamps.size() == 0) {
-			obs_log(gf->log_level, "VAD detected no speech in %d frames",
-				whisper_buffer_16khz);
+			obs_log(gf->log_level, "VAD detected no speech");
 			skipped_inference = true;
 		}
 	}
@@ -362,8 +366,13 @@ long long process_audio_from_buffer(struct cleanstream_data *gf)
 		{
 			std::lock_guard<std::mutex> lock(gf->whisper_outbuf_mutex);
 			gf->current_result = inference_result;
+			if (gf->current_result == DETECTION_RESULT_BEEP) {
+				gf->current_result_start_timestamp = start_timestamp;
+				gf->current_result_end_timestamp = end_timestamp;
+			}
 		}
 	} else {
+		gf->current_result = DETECTION_RESULT_SILENCE;
 		if (gf->log_words) {
 			obs_log(LOG_INFO, "skipping inference");
 		}
@@ -376,6 +385,15 @@ long long process_audio_from_buffer(struct cleanstream_data *gf)
 		(uint32_t)gf->frames * 1000u / gf->sample_rate; // number of frames in this packet
 	obs_log(gf->log_level, "audio processing of %u ms new data took %d ms", audio_processed_ms,
 		(int)duration);
+
+	if (duration > (gf->delay_ms - audio_processed_ms)) {
+		obs_log(gf->log_level,
+			"audio processing (%d ms) longer than delay (%lu ms), increase delay",
+			(int)duration, gf->delay_ms);
+		gf->delay_ms += 100;
+	} else {
+		gf->delay_ms -= 100;
+	}
 
 	return duration;
 }
