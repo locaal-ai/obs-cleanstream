@@ -394,7 +394,7 @@ void cleanstream_defaults(obs_data_t *s)
 	obs_data_set_default_string(s, "initial_prompt", "");
 	obs_data_set_default_int(s, "n_threads", 4);
 	obs_data_set_default_int(s, "n_max_text_ctx", 16384);
-	obs_data_set_default_bool(s, "no_context", false);
+	obs_data_set_default_bool(s, "no_context", true);
 	obs_data_set_default_bool(s, "single_segment", true);
 	obs_data_set_default_bool(s, "print_special", false);
 	obs_data_set_default_bool(s, "print_progress", false);
@@ -409,7 +409,7 @@ void cleanstream_defaults(obs_data_t *s)
 	obs_data_set_default_bool(s, "speed_up", false);
 	obs_data_set_default_bool(s, "suppress_blank", true);
 	obs_data_set_default_bool(s, "suppress_non_speech_tokens", true);
-	obs_data_set_default_double(s, "temperature", 0.5);
+	obs_data_set_default_double(s, "temperature", 0.1);
 	obs_data_set_default_double(s, "max_initial_ts", 1.0);
 	obs_data_set_default_double(s, "length_penalty", -1.0);
 }

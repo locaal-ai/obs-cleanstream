@@ -18,110 +18,7 @@
 #include <Windows.h>
 #endif
 #include "model-utils/model-downloader.h"
-
-#define VAD_THOLD 0.0001f
-#define FREQ_THOLD 100.0f
-
-void high_pass_filter(float *pcmf32, size_t pcm32f_size, float cutoff, uint32_t sample_rate)
-{
-	const float rc = 1.0f / (2.0f * (float)M_PI * cutoff);
-	const float dt = 1.0f / (float)sample_rate;
-	const float alpha = dt / (rc + dt);
-
-	float y = pcmf32[0];
-
-	for (size_t i = 1; i < pcm32f_size; i++) {
-		y = alpha * (y + pcmf32[i] - pcmf32[i - 1]);
-		pcmf32[i] = y;
-	}
-}
-
-// VAD (voice activity detection), return true if speech detected
-bool vad_simple(float *pcmf32, size_t pcm32f_size, uint32_t sample_rate, float vad_thold,
-		float freq_thold, bool verbose)
-{
-	const uint64_t n_samples = pcm32f_size;
-
-	if (freq_thold > 0.0f) {
-		high_pass_filter(pcmf32, pcm32f_size, freq_thold, sample_rate);
-	}
-
-	float energy_all = 0.0f;
-
-	for (uint64_t i = 0; i < n_samples; i++) {
-		energy_all += fabsf(pcmf32[i]);
-	}
-
-	energy_all /= (float)n_samples;
-
-	if (verbose) {
-		obs_log(LOG_INFO, "%s: energy_all: %f, vad_thold: %f, freq_thold: %f", __func__,
-			energy_all, vad_thold, freq_thold);
-	}
-
-	if (energy_all < vad_thold) {
-		return false;
-	}
-
-	return true;
-}
-
-float avg_energy_in_window(const float *pcmf32, size_t window_i, uint64_t n_samples_window)
-{
-	float energy_in_window = 0.0f;
-	for (uint64_t j = 0; j < n_samples_window; j++) {
-		energy_in_window += fabsf(pcmf32[window_i + j]);
-	}
-	energy_in_window /= (float)n_samples_window;
-
-	return energy_in_window;
-}
-
-float max_energy_in_window(const float *pcmf32, size_t window_i, uint64_t n_samples_window)
-{
-	float energy_in_window = 0.0f;
-	for (uint64_t j = 0; j < n_samples_window; j++) {
-		energy_in_window = std::max(energy_in_window, fabsf(pcmf32[window_i + j]));
-	}
-
-	return energy_in_window;
-}
-
-// Find a word boundary
-size_t word_boundary_simple(const float *pcmf32, size_t pcm32f_size, uint32_t sample_rate,
-			    float thold, bool verbose)
-{
-	// scan the buffer with a window of 50ms
-	const uint64_t n_samples_window = (sample_rate * 50) / 1000;
-
-	float first_window_energy = avg_energy_in_window(pcmf32, 0, n_samples_window);
-	float last_window_energy =
-		avg_energy_in_window(pcmf32, pcm32f_size - n_samples_window, n_samples_window);
-	float max_energy_in_middle =
-		max_energy_in_window(pcmf32, n_samples_window, pcm32f_size - n_samples_window);
-
-	if (verbose) {
-		obs_log(LOG_INFO,
-			"%s: first_window_energy: %f, last_window_energy: %f, max_energy_in_middle: %f",
-			__func__, first_window_energy, last_window_energy, max_energy_in_middle);
-		// print avg energy in all windows in sample
-		for (uint64_t i = 0; i < pcm32f_size - n_samples_window; i += n_samples_window) {
-			obs_log(LOG_INFO, "%s: avg energy_in_window %llu: %f", __func__, i,
-				avg_energy_in_window(pcmf32, i, n_samples_window));
-		}
-	}
-
-	const float max_energy_thold = max_energy_in_middle * thold;
-	if (first_window_energy < max_energy_thold && last_window_energy < max_energy_thold) {
-		if (verbose) {
-			obs_log(LOG_INFO, "%s: word boundary found between %llu and %llu", __func__,
-				n_samples_window, pcm32f_size - n_samples_window);
-		}
-		return n_samples_window;
-	}
-
-	return 0;
-}
+#include "whisper-utils.h"
 
 struct whisper_context *init_whisper_context(const std::string &model_path_in,
 					     struct cleanstream_data *gf)
@@ -267,21 +164,32 @@ int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
 		}
 		sentence_p /= (float)n_tokens;
 
-		// convert text to lowercase
-		std::string text_lower(text);
-		std::transform(text_lower.begin(), text_lower.end(), text_lower.begin(), ::tolower);
-		// trim whitespace (use lambda)
-		text_lower.erase(std::find_if(text_lower.rbegin(), text_lower.rend(),
-					      [](unsigned char ch) { return !std::isspace(ch); })
-					 .base(),
-				 text_lower.end());
+		std::string text_preproc = text;
+
+		if (text_preproc.empty()) {
+			return DETECTION_RESULT_SILENCE;
+		}
+
+		// if language is en convert text to lowercase
+		if (strcmp(gf->whisper_params.language, "en") == 0) {
+			std::string text_lower;
+			std::transform(text_preproc.begin(), text_preproc.end(), text_lower.begin(),
+				       ::tolower);
+			text_preproc = text_lower;
+			// remove leading and trailing non-alphanumeric characters
+			text_preproc = remove_leading_trailing_nonalpha(text_preproc);
+		} else {
+			// fix UTF8 encoding
+			std::string text_fixed = fix_utf8(text);
+			text_preproc = text_fixed;
+		}
 
 		if (gf->log_words) {
 			obs_log(LOG_INFO, "[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(),
-				to_timestamp(t1).c_str(), sentence_p, text_lower.c_str());
+				to_timestamp(t1).c_str(), sentence_p, text_preproc.c_str());
 		}
 
-		if (text_lower.empty()) {
+		if (text_preproc.empty()) {
 			return DETECTION_RESULT_SILENCE;
 		}
 
@@ -289,7 +197,7 @@ int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
 		try {
 			if (gf->detect_regex != nullptr && strlen(gf->detect_regex) > 0) {
 				std::regex filler_regex(gf->detect_regex);
-				if (std::regex_search(text_lower, filler_regex,
+				if (std::regex_search(text_preproc, filler_regex,
 						      std::regex_constants::match_any)) {
 					return DETECTION_RESULT_BEEP;
 				}
