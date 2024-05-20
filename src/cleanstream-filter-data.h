@@ -73,7 +73,6 @@ struct cleanstream_data {
 	std::map<std::string, AudioDataFloat> audioFileCache;
 	size_t audioFilePointer = 0;
 
-	float filler_p_threshold;
 	bool vad_enabled;
 	int log_level;
 	const char *detect_regex;
