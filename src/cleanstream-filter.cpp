@@ -228,7 +228,6 @@ void cleanstream_update(void *data, obs_data_t *s)
 
 	gf->detect_regex = obs_data_get_string(s, "detect_regex");
 	gf->replace_sound = obs_data_get_int(s, "replace_sound");
-	gf->filler_p_threshold = (float)obs_data_get_double(s, "filler_p_threshold");
 	gf->log_level = (int)obs_data_get_int(s, "log_level");
 	gf->vad_enabled = obs_data_get_bool(s, "vad_enabled");
 	gf->log_words = obs_data_get_bool(s, "log_words");
@@ -382,7 +381,6 @@ void cleanstream_defaults(obs_data_t *s)
 		"(fuck)|(shit)|(bitch)|(cunt)|(pussy)|(dick)|(asshole)|(whore)|(cock)|(nigger)|(nigga)|(prick)");
 	obs_data_set_default_int(s, "replace_sound", REPLACE_SOUNDS_SILENCE);
 	obs_data_set_default_bool(s, "advanced_settings", false);
-	obs_data_set_default_double(s, "filler_p_threshold", 0.75);
 	obs_data_set_default_bool(s, "vad_enabled", true);
 	obs_data_set_default_int(s, "log_level", LOG_DEBUG);
 	obs_data_set_default_bool(s, "log_words", false);
@@ -394,7 +392,7 @@ void cleanstream_defaults(obs_data_t *s)
 	obs_data_set_default_string(s, "initial_prompt", "");
 	obs_data_set_default_int(s, "n_threads", 4);
 	obs_data_set_default_int(s, "n_max_text_ctx", 16384);
-	obs_data_set_default_bool(s, "no_context", false);
+	obs_data_set_default_bool(s, "no_context", true);
 	obs_data_set_default_bool(s, "single_segment", true);
 	obs_data_set_default_bool(s, "print_special", false);
 	obs_data_set_default_bool(s, "print_progress", false);
@@ -409,7 +407,7 @@ void cleanstream_defaults(obs_data_t *s)
 	obs_data_set_default_bool(s, "speed_up", false);
 	obs_data_set_default_bool(s, "suppress_blank", true);
 	obs_data_set_default_bool(s, "suppress_non_speech_tokens", true);
-	obs_data_set_default_double(s, "temperature", 0.5);
+	obs_data_set_default_double(s, "temperature", 0.1);
 	obs_data_set_default_double(s, "max_initial_ts", 1.0);
 	obs_data_set_default_double(s, "length_penalty", -1.0);
 }
@@ -495,6 +493,22 @@ obs_properties_t *cleanstream_properties(void *data)
 		}
 	}
 
+	// Add language selector
+	obs_property_t *whisper_language_select_list =
+		obs_properties_add_list(ppts, "whisper_language_select", "Language",
+					OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+	// get a sorted list of available languages
+	std::vector<std::string> whisper_available_lang_keys;
+	for (auto const &pair : whisper_available_lang) {
+		whisper_available_lang_keys.push_back(pair.first);
+	}
+	std::sort(whisper_available_lang_keys.begin(), whisper_available_lang_keys.end());
+	// iterate over all available languages in whisper_available_lang map<string, string>
+	for (const std::string &key : whisper_available_lang_keys) {
+		obs_property_list_add_string(whisper_language_select_list,
+					     whisper_available_lang.at(key).c_str(), key.c_str());
+	}
+
 	// Add advanced settings checkbox
 	obs_property_t *advanced_settings_prop =
 		obs_properties_add_bool(ppts, "advanced_settings", MT_("advanced_settings"));
@@ -505,16 +519,13 @@ obs_properties_t *cleanstream_properties(void *data)
 		// If advanced settings is enabled, show the advanced settings group
 		const bool show_hide = obs_data_get_bool(settings, "advanced_settings");
 		for (const std::string &prop_name :
-		     {"whisper_params_group", "log_words", "filler_p_threshold", "vad_enabled",
-		      "log_level"}) {
+		     {"whisper_params_group", "log_words", "vad_enabled", "log_level"}) {
 			obs_property_set_visible(obs_properties_get(props, prop_name.c_str()),
 						 show_hide);
 		}
 		return true;
 	});
 
-	obs_properties_add_float_slider(ppts, "filler_p_threshold", MT_("filler_p_threshold"), 0.0f,
-					1.0f, 0.05f);
 	obs_properties_add_bool(ppts, "vad_enabled", MT_("vad_enabled"));
 	obs_property_t *list = obs_properties_add_list(ppts, "log_level", MT_("log_level"),
 						       OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
@@ -526,16 +537,6 @@ obs_properties_t *cleanstream_properties(void *data)
 	obs_properties_t *whisper_params_group = obs_properties_create();
 	obs_properties_add_group(ppts, "whisper_params_group", MT_("Whisper_Parameters"),
 				 OBS_GROUP_NORMAL, whisper_params_group);
-
-	// Add language selector
-	obs_property_t *whisper_language_select_list =
-		obs_properties_add_list(whisper_params_group, "whisper_language_select", "Language",
-					OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
-	// iterate over all available languages in whisper_available_lang map<string, string>
-	for (auto const &pair : whisper_available_lang) {
-		obs_property_list_add_string(whisper_language_select_list, pair.second.c_str(),
-					     pair.first.c_str());
-	}
 
 	obs_property_t *whisper_sampling_method_list = obs_properties_add_list(
 		whisper_params_group, "whisper_sampling_method", MT_("whisper_sampling_method"),
