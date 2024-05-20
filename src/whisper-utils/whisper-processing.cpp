@@ -139,6 +139,8 @@ int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
 	// run the inference
 	int whisper_full_result = -1;
 	try {
+		gf->whisper_params.duration_ms =
+			(int)((float)pcm32f_size / WHISPER_SAMPLE_RATE * 1000.0f);
 		whisper_full_result = whisper_full(gf->whisper_context, gf->whisper_params,
 						   pcm32f_data, (int)pcm32f_size);
 	} catch (const std::exception &e) {
