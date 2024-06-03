@@ -59,7 +59,7 @@ elseif(WIN32)
   endif()
 
   set(WHISPER_CPP_URL
-      "https://github.com/occ-ai/occ-ai-dep-whispercpp/releases/download/0.0.3/whispercpp-windows-${ARCH_PREFIX}-0.0.3.zip"
+      "https://github.com/occ-ai/occ-ai-dep-whispercpp/releases/download/0.0.3/whispercpp-windows-${CUDA_PREFIX}-0.0.3.zip"
   )
   if($ENV{CPU_OR_CUDA} STREQUAL "cpu")
     set(WHISPER_CPP_HASH "A7243E649E0B6D080AA6D2210DB0AC08C597FA11B88C3068B8A60083AD9E62EF")
