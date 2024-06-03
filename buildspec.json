@@ -45,7 +45,7 @@
         }
     },
     "name": "obs-cleanstream",
-    "version": "0.0.8",
+    "version": "0.0.9",
     "author": "Roy Shilkrot",
     "website": "https://github.com/occ-ai/obs-cleanstream/",
     "email": "roy.shil@gmail.com",

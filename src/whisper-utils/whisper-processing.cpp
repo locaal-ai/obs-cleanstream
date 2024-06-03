@@ -66,6 +66,7 @@ struct whisper_context *init_whisper_context(const std::string &model_path_in,
 	cparams.use_gpu = false;
 	obs_log(LOG_INFO, "Using CPU for inference");
 #endif
+	cparams.flash_attn = false;
 
 	struct whisper_context *ctx = nullptr;
 	try {
@@ -136,13 +137,36 @@ int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
 		int(pcm32f_size), float(pcm32f_size) / WHISPER_SAMPLE_RATE,
 		gf->whisper_params.n_threads);
 
+	std::string text_preproc;
+	float sentence_p = 0.0f;
+	int64_t t0;
+	int64_t t1;
+
 	// run the inference
-	int whisper_full_result = -1;
 	try {
 		gf->whisper_params.duration_ms =
 			(int)((float)pcm32f_size / WHISPER_SAMPLE_RATE * 1000.0f);
-		whisper_full_result = whisper_full(gf->whisper_context, gf->whisper_params,
-						   pcm32f_data, (int)pcm32f_size);
+		int whisper_full_result = whisper_full(gf->whisper_context, gf->whisper_params,
+						       pcm32f_data, (int)pcm32f_size);
+
+		if (whisper_full_result != 0) {
+			obs_log(LOG_WARNING, "failed to process audio, error %d",
+				whisper_full_result);
+			return DETECTION_RESULT_UNKNOWN;
+		}
+		if (whisper_full_n_segments(gf->whisper_context) == 0) {
+			return DETECTION_RESULT_SILENCE;
+		}
+		const int n_segment = 0;
+		text_preproc = whisper_full_get_segment_text(gf->whisper_context, n_segment);
+		t0 = whisper_full_get_segment_t0(gf->whisper_context, n_segment);
+		t1 = whisper_full_get_segment_t1(gf->whisper_context, n_segment);
+
+		const int n_tokens = whisper_full_n_tokens(gf->whisper_context, n_segment);
+		for (int j = 0; j < n_tokens; ++j) {
+			sentence_p += whisper_full_get_token_p(gf->whisper_context, n_segment, j);
+		}
+		sentence_p /= (float)n_tokens;
 	} catch (const std::exception &e) {
 		obs_log(LOG_ERROR, "Whisper exception: %s. Filter restart is required", e.what());
 		whisper_free(gf->whisper_context);
@@ -150,63 +174,41 @@ int run_whisper_inference(struct cleanstream_data *gf, const float *pcm32f_data,
 		return DETECTION_RESULT_UNKNOWN;
 	}
 
-	if (whisper_full_result != 0) {
-		obs_log(LOG_WARNING, "failed to process audio, error %d", whisper_full_result);
-		return DETECTION_RESULT_UNKNOWN;
+	if (text_preproc.empty()) {
+		return DETECTION_RESULT_SILENCE;
+	}
+
+	// if language is en convert text to lowercase
+	if (strcmp(gf->whisper_params.language, "en") == 0) {
+		std::transform(text_preproc.begin(), text_preproc.end(), text_preproc.begin(),
+			       ::tolower);
+		// remove leading and trailing non-alphanumeric characters
+		text_preproc = remove_leading_trailing_nonalpha(text_preproc);
 	} else {
-		const int n_segment = 0;
-		const char *text = whisper_full_get_segment_text(gf->whisper_context, n_segment);
-		const int64_t t0 = whisper_full_get_segment_t0(gf->whisper_context, n_segment);
-		const int64_t t1 = whisper_full_get_segment_t1(gf->whisper_context, n_segment);
+		// fix UTF8 encoding
+		text_preproc = fix_utf8(text_preproc);
+	}
 
-		float sentence_p = 0.0f;
-		const int n_tokens = whisper_full_n_tokens(gf->whisper_context, n_segment);
-		for (int j = 0; j < n_tokens; ++j) {
-			sentence_p += whisper_full_get_token_p(gf->whisper_context, n_segment, j);
-		}
-		sentence_p /= (float)n_tokens;
+	if (gf->log_words) {
+		obs_log(LOG_INFO, "[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(),
+			to_timestamp(t1).c_str(), sentence_p, text_preproc.c_str());
+	}
 
-		std::string text_preproc = text;
+	if (text_preproc.empty()) {
+		return DETECTION_RESULT_SILENCE;
+	}
 
-		if (text_preproc.empty()) {
-			return DETECTION_RESULT_SILENCE;
-		}
-
-		// if language is en convert text to lowercase
-		if (strcmp(gf->whisper_params.language, "en") == 0) {
-			std::string text_lower;
-			std::transform(text_preproc.begin(), text_preproc.end(), text_lower.begin(),
-				       ::tolower);
-			text_preproc = text_lower;
-			// remove leading and trailing non-alphanumeric characters
-			text_preproc = remove_leading_trailing_nonalpha(text_preproc);
-		} else {
-			// fix UTF8 encoding
-			std::string text_fixed = fix_utf8(text);
-			text_preproc = text_fixed;
-		}
-
-		if (gf->log_words) {
-			obs_log(LOG_INFO, "[%s --> %s] (%.3f) %s", to_timestamp(t0).c_str(),
-				to_timestamp(t1).c_str(), sentence_p, text_preproc.c_str());
-		}
-
-		if (text_preproc.empty()) {
-			return DETECTION_RESULT_SILENCE;
-		}
-
-		// use a regular expression to detect filler words with a word boundary
-		try {
-			if (gf->detect_regex != nullptr && strlen(gf->detect_regex) > 0) {
-				std::regex filler_regex(gf->detect_regex);
-				if (std::regex_search(text_preproc, filler_regex,
-						      std::regex_constants::match_any)) {
-					return DETECTION_RESULT_BEEP;
-				}
+	// use a regular expression to detect filler words with a word boundary
+	try {
+		if (gf->detect_regex != nullptr && strlen(gf->detect_regex) > 0) {
+			std::regex filler_regex(gf->detect_regex);
+			if (std::regex_search(text_preproc, filler_regex,
+					      std::regex_constants::match_any)) {
+				return DETECTION_RESULT_BEEP;
 			}
-		} catch (const std::regex_error &e) {
-			obs_log(LOG_ERROR, "Regex error: %s", e.what());
 		}
+	} catch (const std::regex_error &e) {
+		obs_log(LOG_ERROR, "Regex error: %s", e.what());
 	}
 
 	return DETECTION_RESULT_SPEECH;
