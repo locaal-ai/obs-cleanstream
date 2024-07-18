@@ -15,7 +15,7 @@ jobs:
       config: ${{ steps.setup.outputs.config }}
       commitHash: ${{ steps.setup.outputs.commitHash }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Check Event Data ☑️
@@ -67,7 +67,7 @@ jobs:
       run:
         shell: zsh --no-rcs --errexit --pipefail {0}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
@@ -92,7 +92,7 @@ jobs:
           print "pluginName=${product_name}" >> $GITHUB_OUTPUT
           print "pluginVersion=${product_version}" >> $GITHUB_OUTPUT
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         id: ccache-cache
         with:
           path: ${{ github.workspace }}/.ccache
@@ -161,7 +161,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
@@ -178,7 +178,7 @@ jobs:
           echo "pluginName=${product_name}" >> $GITHUB_OUTPUT
           echo "pluginVersion=${product_version}" >> $GITHUB_OUTPUT
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         id: ccache-cache
         with:
           path: ${{ github.workspace }}/.ccache
@@ -232,7 +232,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
