@@ -24,7 +24,6 @@ set(_obs_clang_c_options
     -Wbool-conversion
     -Wcomma
     -Wconstant-conversion
-    -Wdeprecated-declarations
     -Wempty-body
     -Wenum-conversion
     -Werror=return-type
@@ -36,6 +35,8 @@ set(_obs_clang_c_options
     -Wint-conversion
     -Wnewline-eof
     -Wno-conversion
+    -Wno-deprecated-declarations
+    -Wno-error=deprecated-declarations
     -Wno-float-conversion
     -Wno-implicit-fallthrough
     -Wno-missing-braces
