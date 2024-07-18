@@ -56,6 +56,6 @@ runs:
           echo ::endgroup::
 
           echo ::group::Run clang-format-17
-          ./build-aux/run-clang-format --fail-${{ inputs.failCondition }} --check -v -v -v
+          ./build-aux/run-clang-format --fail-${{ inputs.failCondition }} --check --debug
           echo ::endgroup::
         }
