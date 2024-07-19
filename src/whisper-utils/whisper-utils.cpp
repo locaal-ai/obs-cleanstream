@@ -147,8 +147,8 @@ void start_whisper_thread_with_path(struct cleanstream_data *gf, const std::stri
 	gf->whisper_thread.swap(new_whisper_thread);
 }
 
-#define is_lead_byte(c) (((c)&0xe0) == 0xc0 || ((c)&0xf0) == 0xe0 || ((c)&0xf8) == 0xf0)
-#define is_trail_byte(c) (((c)&0xc0) == 0x80)
+#define is_lead_byte(c) (((c) & 0xe0) == 0xc0 || ((c) & 0xf0) == 0xe0 || ((c) & 0xf8) == 0xf0)
+#define is_trail_byte(c) (((c) & 0xc0) == 0x80)
 
 inline int lead_byte_length(const uint8_t c)
 {

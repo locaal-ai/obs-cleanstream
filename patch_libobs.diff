@@ -1,6 +1,0 @@
-265a266,267
->     media-io/audio-resampler.h
->     media-io/audio-math.h
-288a291,292
->     util/circlebuf.h
->     util/threading.h
