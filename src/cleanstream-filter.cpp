@@ -415,7 +415,7 @@ void cleanstream_defaults(obs_data_t *s)
 
 obs_properties_t *cleanstream_properties(void *data)
 {
-	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
+	UNUSED_PARAMETER(data);
 
 	obs_properties_t *ppts = obs_properties_create();
 
@@ -429,6 +429,8 @@ obs_properties_t *cleanstream_properties(void *data)
 	obs_property_list_add_int(replace_sounds_list, "Silence", REPLACE_SOUNDS_SILENCE);
 	// on windows and mac, add external file path for replace sound
 #if defined(_WIN32) || defined(__APPLE__)
+	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
+
 	if (!gf->audioFileCache["beep.wav"].empty()) {
 		obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_BEEP);
 	}
