@@ -347,9 +347,10 @@ void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
 		if (audioFile.empty()) {
 			obs_log(LOG_ERROR, "Failed to load audio file: %s",
 				audio_file_path_fs.string().c_str());
-			return nullptr;
+			gf->audioFileCache[file_name] = {};
+		} else {
+			gf->audioFileCache[file_name] = audioFile;
 		}
-		gf->audioFileCache[file_name] = audioFile;
 	}
 #endif
 
@@ -428,8 +429,14 @@ obs_properties_t *cleanstream_properties(void *data)
 	obs_property_list_add_int(replace_sounds_list, "Silence", REPLACE_SOUNDS_SILENCE);
 	// on windows and mac, add external file path for replace sound
 #if defined(_WIN32) || defined(__APPLE__)
-	obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_BEEP);
-	obs_property_list_add_int(replace_sounds_list, "Horn", REPLACE_SOUNDS_HORN);
+	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
+
+	if (!gf->audioFileCache["beep.wav"].empty()) {
+		obs_property_list_add_int(replace_sounds_list, "Beep", REPLACE_SOUNDS_BEEP);
+	}
+	if (!gf->audioFileCache["horn.wav"].empty()) {
+		obs_property_list_add_int(replace_sounds_list, "Horn", REPLACE_SOUNDS_HORN);
+	}
 	obs_property_list_add_int(replace_sounds_list, "External", REPLACE_SOUNDS_EXTERNAL);
 
 	// add external file path for replace sound
@@ -447,8 +454,6 @@ obs_properties_t *cleanstream_properties(void *data)
 					 replace_sound == REPLACE_SOUNDS_EXTERNAL);
 		return true;
 	});
-
-	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
 
 	obs_property_set_modified_callback2(
 		replace_sound_path,
