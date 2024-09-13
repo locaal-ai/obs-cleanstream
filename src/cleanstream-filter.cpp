@@ -262,7 +262,6 @@ void cleanstream_update(void *data, obs_data_t *s)
 		gf->whisper_params.max_len = (int)obs_data_get_int(s, "max_len");
 		gf->whisper_params.split_on_word = obs_data_get_bool(s, "split_on_word");
 		gf->whisper_params.max_tokens = (int)obs_data_get_int(s, "max_tokens");
-		gf->whisper_params.speed_up = obs_data_get_bool(s, "speed_up");
 		gf->whisper_params.suppress_blank = obs_data_get_bool(s, "suppress_blank");
 		gf->whisper_params.suppress_non_speech_tokens =
 			obs_data_get_bool(s, "suppress_non_speech_tokens");

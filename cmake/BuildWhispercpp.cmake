@@ -1,30 +1,23 @@
 include(ExternalProject)
 include(FetchContent)
 
-if(${CMAKE_BUILD_TYPE} STREQUAL Release OR ${CMAKE_BUILD_TYPE} STREQUAL RelWithDebInfo)
-  set(Whispercpp_BUILD_TYPE Release)
-else()
-  set(Whispercpp_BUILD_TYPE Debug)
-endif()
+set(PREBUILT_WHISPERCPP_VERSION "0.0.6")
+set(PREBUILT_WHISPERCPP_URL_BASE
+    "https://github.com/occ-ai/occ-ai-dep-whispercpp/releases/download/${PREBUILT_WHISPERCPP_VERSION}")
 
 if(APPLE)
   # check the "MACOS_ARCH" env var to figure out if this is x86 or arm64
-  if(NOT DEFINED ENV{MACOS_ARCH})
-    message(FATAL_ERROR "The MACOS_ARCH environment variable is not set. Please set it to either `x86_64` or `arm64`")
-  endif(NOT DEFINED ENV{MACOS_ARCH})
-
-  set(WHISPER_CPP_URL
-      "https://github.com/occ-ai/occ-ai-dep-whispercpp/releases/download/0.0.3/whispercpp-macos-$ENV{MACOS_ARCH}-0.0.3.tar.gz"
-  )
   if($ENV{MACOS_ARCH} STREQUAL "x86_64")
-    set(WHISPER_CPP_HASH "94DB35C69E958C8A59F0F331734F4F4F45F4BB13D2F54D3C838457E8590874C4")
+    set(WHISPER_CPP_HASH "454abee900a96a0a10a91f631ff797bdbdf2df0d2a819479a409634c9be1e12c")
   elseif($ENV{MACOS_ARCH} STREQUAL "arm64")
-    set(WHISPER_CPP_HASH "ACA1DF8F34F4946B56FEED89B7548C9AD56D1DD89615C96BDEB6E4734A946451")
+    set(WHISPER_CPP_HASH "f726388cc494f6fca864c860af6c1bc2932c3dc823ef92197b1e29f088425668")
   else()
     message(
       FATAL_ERROR
         "The MACOS_ARCH environment variable is not set to a valid value. Please set it to either `x86_64` or `arm64`")
   endif()
+  set(WHISPER_CPP_URL
+      "${PREBUILT_WHISPERCPP_URL_BASE}/whispercpp-macos-$ENV{MACOS_ARCH}-${PREBUILT_WHISPERCPP_VERSION}.tar.gz")
 
   FetchContent_Declare(
     whispercpp_fetch
@@ -35,51 +28,52 @@ if(APPLE)
   add_library(Whispercpp::Whisper STATIC IMPORTED)
   set_target_properties(
     Whispercpp::Whisper
-    PROPERTIES
-      IMPORTED_LOCATION
-      ${whispercpp_fetch_SOURCE_DIR}/lib/static/${CMAKE_STATIC_LIBRARY_PREFIX}whisper${CMAKE_STATIC_LIBRARY_SUFFIX})
+    PROPERTIES IMPORTED_LOCATION
+               ${whispercpp_fetch_SOURCE_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}whisper${CMAKE_STATIC_LIBRARY_SUFFIX})
   set_target_properties(Whispercpp::Whisper PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
                                                        ${whispercpp_fetch_SOURCE_DIR}/include)
+  add_library(Whispercpp::GGML STATIC IMPORTED)
+  set_target_properties(
+    Whispercpp::GGML
+    PROPERTIES IMPORTED_LOCATION
+               ${whispercpp_fetch_SOURCE_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}ggml${CMAKE_STATIC_LIBRARY_SUFFIX})
+
+  add_library(Whispercpp::CoreML STATIC IMPORTED)
+  set_target_properties(
+    Whispercpp::CoreML
+    PROPERTIES
+      IMPORTED_LOCATION
+      ${whispercpp_fetch_SOURCE_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}whisper.coreml${CMAKE_STATIC_LIBRARY_SUFFIX})
 
 elseif(WIN32)
-  if(NOT DEFINED ENV{CPU_OR_CUDA})
-    message(
-      FATAL_ERROR
-        "The CPU_OR_CUDA environment variable is not set. Please set it to either `cpu`, `clblast`, `11.8.0` or `12.2.0`"
-    )
-  endif(NOT DEFINED ENV{CPU_OR_CUDA})
-
-  set(CUDA_PREFIX $ENV{CPU_OR_CUDA})
-  if(NOT $ENV{CPU_OR_CUDA} STREQUAL "cpu" AND NOT $ENV{CPU_OR_CUDA} STREQUAL "clblast")
-    set(CUDA_PREFIX "cuda$ENV{CPU_OR_CUDA}")
-    add_compile_definitions("LOCALVOCAL_WITH_CUDA")
-  elseif($ENV{CPU_OR_CUDA} STREQUAL "clblast")
-    set(CUDA_PREFIX "$ENV{CPU_OR_CUDA}")
-    add_compile_definitions("LOCALVOCAL_WITH_OPENCL")
+  if(NOT DEFINED ACCELERATION)
+    message(FATAL_ERROR "ACCELERATION is not set. Please set it to either `cpu`, `cuda` or `hipblas`")
   endif()
 
+  set(ARCH_PREFIX ${ACCELERATION})
   set(WHISPER_CPP_URL
-      "https://github.com/occ-ai/occ-ai-dep-whispercpp/releases/download/0.0.3/whispercpp-windows-${CUDA_PREFIX}-0.0.3.zip"
-  )
-  if($ENV{CPU_OR_CUDA} STREQUAL "cpu")
-    set(WHISPER_CPP_HASH "A7243E649E0B6D080AA6D2210DB0AC08C597FA11B88C3068B8A60083AD9E62EF")
-  elseif($ENV{CPU_OR_CUDA} STREQUAL "clblast")
-    set(WHISPER_CPP_HASH "7957AC76A0E6517C95951B3BECCB554CD992E30DAF8716681B40F375590F69F1")
-  elseif($ENV{CPU_OR_CUDA} STREQUAL "12.2.0")
-    set(WHISPER_CPP_HASH "0F6BC1F91C573A867D6972554FC29C3D8EAFD7994FA0FEBBEAFCF945DC8A9F41")
-  elseif($ENV{CPU_OR_CUDA} STREQUAL "11.8.0")
-    set(WHISPER_CPP_HASH "51CB6750ADDF96F38106E4E88212FCC06500999E568E5A4EDC6D42CA6D7CA99D")
+      "${PREBUILT_WHISPERCPP_URL_BASE}/whispercpp-windows-${ARCH_PREFIX}-${PREBUILT_WHISPERCPP_VERSION}.zip")
+  if(${ACCELERATION} STREQUAL "cpu")
+    set(WHISPER_CPP_HASH "126c5d859e902b4cd0f2cd09304a68750f1dbc6a7aa62e280cfd56c51a6a1c95")
+    add_compile_definitions("LOCALVOCAL_WITH_CPU")
+  elseif(${ACCELERATION} STREQUAL "cuda")
+    set(WHISPER_CPP_HASH "5b9592c311a7f1612894ca0b36f6bd4effb6a46acd03d33924df56c52f566779")
+    add_compile_definitions("LOCALVOCAL_WITH_CUDA")
+  elseif(${ACCELERATION} STREQUAL "hipblas")
+    set(WHISPER_CPP_HASH "c306ecce16cd10f377fdefbf7bb252abac8e6638a2637f82b1f1f32dd2cb4e39")
+    add_compile_definitions("LOCALVOCAL_WITH_HIPBLAS")
   else()
     message(
       FATAL_ERROR
-        "The CPU_OR_CUDA environment variable is not set to a valid value. Please set it to either `cpu`, `clblast`, `11.8.0` or `12.2.0`"
+        "The ACCELERATION environment variable is not set to a valid value. Please set it to either `cpu` or `cuda` or `hipblas`"
     )
   endif()
 
   FetchContent_Declare(
     whispercpp_fetch
     URL ${WHISPER_CPP_URL}
-    URL_HASH SHA256=${WHISPER_CPP_HASH})
+    URL_HASH SHA256=${WHISPER_CPP_HASH}
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
   FetchContent_MakeAvailable(whispercpp_fetch)
 
   add_library(Whispercpp::Whisper SHARED IMPORTED)
@@ -94,7 +88,7 @@ elseif(WIN32)
   set_target_properties(Whispercpp::Whisper PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
                                                        ${whispercpp_fetch_SOURCE_DIR}/include)
 
-  if($ENV{CPU_OR_CUDA} STREQUAL "cpu")
+  if(${ACCELERATION} STREQUAL "cpu")
     # add openblas to the link line
     add_library(Whispercpp::OpenBLAS STATIC IMPORTED)
     set_target_properties(Whispercpp::OpenBLAS PROPERTIES IMPORTED_LOCATION
@@ -104,8 +98,12 @@ elseif(WIN32)
   # glob all dlls in the bin directory and install them
   file(GLOB WHISPER_DLLS ${whispercpp_fetch_SOURCE_DIR}/bin/*.dll)
   install(FILES ${WHISPER_DLLS} DESTINATION "obs-plugins/64bit")
-
 else()
+  if(${CMAKE_BUILD_TYPE} STREQUAL Release OR ${CMAKE_BUILD_TYPE} STREQUAL RelWithDebInfo)
+    set(Whispercpp_BUILD_TYPE Release)
+  else()
+    set(Whispercpp_BUILD_TYPE Debug)
+  endif()
   set(Whispercpp_Build_GIT_TAG "v1.6.2")
   set(WHISPER_EXTRA_CXX_FLAGS "-fPIC")
   set(WHISPER_ADDITIONAL_CMAKE_ARGS -DWHISPER_BLAS=OFF -DWHISPER_CUBLAS=OFF -DWHISPER_OPENBLAS=OFF)
@@ -143,9 +141,10 @@ endif()
 add_library(Whispercpp INTERFACE)
 add_dependencies(Whispercpp Whispercpp_Build)
 target_link_libraries(Whispercpp INTERFACE Whispercpp::Whisper)
-if(WIN32 AND "$ENV{CPU_OR_CUDA}" STREQUAL "cpu")
+if(WIN32 AND "${ACCELERATION}" STREQUAL "cpu")
   target_link_libraries(Whispercpp INTERFACE Whispercpp::OpenBLAS)
 endif()
 if(APPLE)
-  target_link_libraries(Whispercpp INTERFACE "-framework Accelerate")
+  target_link_libraries(Whispercpp INTERFACE "-framework Accelerate -framework CoreML -framework Metal")
+  target_link_libraries(Whispercpp INTERFACE Whispercpp::GGML Whispercpp::CoreML)
 endif(APPLE)
