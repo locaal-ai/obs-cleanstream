@@ -37,9 +37,9 @@
         }
     },
     "name": "obs-cleanstream",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "author": "Roy Shilkrot",
-    "website": "https://github.com/occ-ai/obs-cleanstream/",
+    "website": "https://github.com/locaal-ai/obs-cleanstream/",
     "email": "roy.shil@gmail.com",
     "uuids": {
         "macosPackage": "b6f62fcf-36d3-4006-8b9a-dc0df1875dda",
