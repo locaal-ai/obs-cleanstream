@@ -222,7 +222,7 @@ void cleanstream_destroy(void *data)
 
 void cleanstream_update(void *data, obs_data_t *s)
 {
-	obs_log(LOG_INFO, "cleanstream_update");
+	obs_log(LOG_DEBUG, "cleanstream_update");
 
 	struct cleanstream_data *gf = static_cast<struct cleanstream_data *>(data);
 
@@ -270,7 +270,7 @@ void cleanstream_update(void *data, obs_data_t *s)
 		gf->whisper_params.length_penalty = (float)obs_data_get_double(s, "length_penalty");
 	}
 
-	obs_log(LOG_INFO, "cleanstream update finished");
+	obs_log(LOG_DEBUG, "cleanstream update finished");
 }
 
 void *cleanstream_create(obs_data_t *settings, obs_source_t *filter)
@@ -523,20 +523,25 @@ obs_properties_t *cleanstream_properties(void *data)
 		// If advanced settings is enabled, show the advanced settings group
 		const bool show_hide = obs_data_get_bool(settings, "advanced_settings");
 		for (const std::string &prop_name :
-		     {"whisper_params_group", "log_words", "vad_enabled", "log_level"}) {
+		     {"whisper_params_group", "advanced_settings_group"}) {
 			obs_property_set_visible(obs_properties_get(props, prop_name.c_str()),
 						 show_hide);
 		}
 		return true;
 	});
 
-	obs_properties_add_bool(ppts, "vad_enabled", MT_("vad_enabled"));
-	obs_property_t *list = obs_properties_add_list(ppts, "log_level", MT_("log_level"),
-						       OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_properties_t *advanced_settings_group = obs_properties_create();
+	obs_properties_add_group(ppts, "advanced_settings_group", MT_("Advanced_Settings"),
+				 OBS_GROUP_NORMAL, advanced_settings_group);
+
+	obs_properties_add_bool(advanced_settings_group, "vad_enabled", MT_("vad_enabled"));
+	obs_property_t *list = obs_properties_add_list(advanced_settings_group, "log_level",
+						       MT_("log_level"), OBS_COMBO_TYPE_LIST,
+						       OBS_COMBO_FORMAT_INT);
 	obs_property_list_add_int(list, "DEBUG", LOG_DEBUG);
 	obs_property_list_add_int(list, "INFO", LOG_INFO);
 	obs_property_list_add_int(list, "WARNING", LOG_WARNING);
-	obs_properties_add_bool(ppts, "log_words", MT_("log_words"));
+	obs_properties_add_bool(advanced_settings_group, "log_words", MT_("log_words"));
 
 	obs_properties_t *whisper_params_group = obs_properties_create();
 	obs_properties_add_group(ppts, "whisper_params_group", MT_("Whisper_Parameters"),
