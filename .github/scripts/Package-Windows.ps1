@@ -5,7 +5,7 @@ param(
     [ValidateSet('Debug', 'RelWithDebInfo', 'Release', 'MinSizeRel')]
     [string] $Configuration = 'RelWithDebInfo',
     [ValidateSet('cpu', 'cuda', 'hipblas')]
-    [string] $Cublas = 'cpu',
+    [string] $acceleration = 'cpu',
     [switch] $BuildInstaller,
     [switch] $SkipDeps
 )
@@ -49,16 +49,8 @@ function Package {
     $BuildSpec = Get-Content -Path ${BuildSpecFile} -Raw | ConvertFrom-Json
     $ProductName = $BuildSpec.name
     $ProductVersion = $BuildSpec.version
-    # Check if $cublas is cpu or cuda
-    if ( $Cublas -eq 'cpu' ) {
-        $CudaName = 'cpu'
-    } elseif ( $Cublas -eq 'clblast' ) {
-        $CudaName = 'clblast'
-    } else {
-        $CudaName = "cuda${Cublas}"
-    }
 
-    $OutputName = "${ProductName}-${ProductVersion}-windows-${Target}-${CudaName}"
+    $OutputName = "${ProductName}-${ProductVersion}-windows-${Target}-${acceleration}"
 
     if ( ! $SkipDeps ) {
         Install-BuildDependencies -WingetFile "${ScriptHome}/.Wingetfile"
