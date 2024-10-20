@@ -301,7 +301,7 @@ long long process_audio_from_buffer(struct cleanstream_data *gf)
 	if (duration > (gf->delay_ms - audio_processed_ms)) {
 		obs_log(gf->log_level,
 			"audio processing (%d ms) longer than delay (%lu ms), increase delay",
-			(int)duration, gf->delay_ms);
+			(int)duration, gf->delay_ms - audio_processed_ms);
 		gf->delay_ms += 100;
 	} else {
 		gf->delay_ms -= 100;
