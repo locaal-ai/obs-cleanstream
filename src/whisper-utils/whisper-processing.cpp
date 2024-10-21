@@ -18,6 +18,7 @@
 #include <Windows.h>
 #endif
 #include "model-utils/model-downloader.h"
+#include "model-utils/model-find-utils.h"
 #include "whisper-utils.h"
 
 struct whisper_context *init_whisper_context(const std::string &model_path_in,

@@ -47,10 +47,10 @@ std::string find_model_folder(const ModelInfo &model_info)
 	}
 #ifdef _WIN32
 	// convert mbstring to wstring
-	int count = MultiByteToWideChar(CP_UTF8, 0, config_folder, strlen(config_folder), NULL, 0);
+	const int config_len = (int)strlen(config_folder);
+	int count = MultiByteToWideChar(CP_UTF8, 0, config_folder, config_len, NULL, 0);
 	std::wstring config_folder_str(count, 0);
-	MultiByteToWideChar(CP_UTF8, 0, config_folder, strlen(config_folder), &config_folder_str[0],
-			    count);
+	MultiByteToWideChar(CP_UTF8, 0, config_folder, config_len, &config_folder_str[0], count);
 	obs_log(LOG_INFO, "Config models folder: %S", config_folder_str.c_str());
 #else
 	std::string config_folder_str = config_folder;
