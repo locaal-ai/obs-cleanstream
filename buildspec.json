@@ -37,7 +37,7 @@
         }
     },
     "name": "obs-cleanstream",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "author": "Roy Shilkrot",
     "website": "https://github.com/locaal-ai/obs-cleanstream/",
     "email": "roy.shil@gmail.com",

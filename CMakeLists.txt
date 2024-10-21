@@ -94,6 +94,8 @@ else()
   include(cmake/FetchOnnxruntime.cmake)
 endif()
 
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE vendor/nlohmann-json)
+
 target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE src/plugin-main.c
@@ -103,6 +105,7 @@ target_sources(
           src/model-utils/model-downloader.cpp
           src/model-utils/model-downloader-ui.cpp
           src/model-utils/model-infos.cpp
+          src/model-utils/model-find-utils.cpp
           src/whisper-utils/whisper-utils.cpp
           src/whisper-utils/whisper-processing.cpp
           src/whisper-utils/silero-vad-onnx.cpp)

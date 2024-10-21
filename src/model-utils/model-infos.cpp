@@ -1,136 +1,284 @@
 #include "model-downloader-types.h"
+#include "plugin-support.h"
 
-std::map<std::string, ModelInfo> models_info = {{
-	{"Whisper Base q5 (57Mb)",
-	 {"Whisper Base q5",
-	  "whisper-base-q5",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-base-q5_1.bin",
-	    "422F1AE452ADE6F30A004D7E5C6A43195E4433BC370BF23FAC9CC591F01A8898"}}}},
-	{"Whisper Base English q5 (57Mb)",
-	 {"Whisper Base En q5",
-	  "ggml-model-whisper-base-en-q5_1",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-base.en-q5_1.bin",
-	    "4BAF70DD0D7C4247BA2B81FAFD9C01005AC77C2F9EF064E00DCF195D0E2FDD2F"}}}},
-	{"Whisper Base (141Mb)",
-	 {"Whisper Base",
-	  "ggml-model-whisper-base",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-base.bin",
-	    "60ED5BC3DD14EEA856493D334349B405782DDCAF0028D4B5DF4088345FBA2EFE"}}}},
-	{"Whisper Base English (141Mb)",
-	 {"Whisper Base En",
-	  "ggml-model-whisper-base-en",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-base.en.bin",
-	    "A03779C86DF3323075F5E796CB2CE5029F00EC8869EEE3FDFB897AFE36C6D002"}}}},
-	{"Whisper Large v1 q5 (1Gb)",
-	 {"Whisper Large v1 q5",
-	  "ggml-model-whisper-large-q5_0",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-large-q5_0.bin",
-	    "3A214837221E4530DBC1FE8D734F302AF393EB30BD0ED046042EBF4BAF70F6F2"}}}},
-	{"Whisper Medium q5 (514Mb)",
-	 {"Whisper Medium q5",
-	  "ggml-model-whisper-medium-q5_0",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-medium-q5_0.bin",
-	    "19FEA4B380C3A618EC4723C3EEF2EB785FFBA0D0538CF43F8F235E7B3B34220F"}}}},
-	{"Whisper Medium English q5 (514Mb)",
-	 {"Whisper Medium En q5",
-	  "ggml-model-whisper-medium-en-q5_0",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-medium.en-q5_0.bin",
-	    "76733E26AD8FE1C7A5BF7531A9D41917B2ADC0F20F2E4F5531688A8C6CD88EB0"}}}},
-	{"Whisper Small q5 (181Mb)",
-	 {"Whisper Small q5",
-	  "ggml-model-whisper-small-q5_1",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-small-q5_1.bin",
-	    "AE85E4A935D7A567BD102FE55AFC16BB595BDB618E11B2FC7591BC08120411BB"}}}},
-	{"Whisper Small English q5 (181Mb)",
-	 {"Whisper Small En q5",
-	  "ggml-model-whisper-small-en-q5_1",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-small.en-q5_1.bin",
-	    "BFDFF4894DCB76BBF647D56263EA2A96645423F1669176F4844A1BF8E478AD30"}}}},
-	{"Whisper Small (465Mb)",
-	 {"Whisper Small",
-	  "ggml-model-whisper-small",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-small.bin",
-	    "1BE3A9B2063867B937E64E2EC7483364A79917E157FA98C5D94B5C1FFFEA987B"}}}},
-	{"Whisper Small English (465Mb)",
-	 {"Whisper Small En",
-	  "ggml-model-whisper-small-en",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-small.en.bin",
-	    "C6138D6D58ECC8322097E0F987C32F1BE8BB0A18532A3F88F734D1BBF9C41E5D"}}}},
-	{"Whisper Tiny (74Mb)",
-	 {"Whisper Tiny",
-	  "ggml-model-whisper-tiny",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-tiny.bin",
-	    "BE07E048E1E599AD46341C8D2A135645097A538221678B7ACDD1B1919C6E1B21"}}}},
-	{"Whisper Tiny q5 (31Mb)",
-	 {"Whisper Tiny q5",
-	  "ggml-model-whisper-tiny-q5_1",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-tiny-q5_1.bin",
-	    "818710568DA3CA15689E31A743197B520007872FF9576237BDA97BD1B469C3D7"}}}},
-	{"Whisper Tiny English q5 (31Mb)",
-	 {"Whisper Tiny En q5",
-	  "ggml-model-whisper-tiny-en-q5_1",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-tiny.en-q5_1.bin",
-	    "C77C5766F1CEF09B6B7D47F21B546CBDDD4157886B3B5D6D4F709E91E66C7C2B"}}}},
-	{"Whisper Tiny English q8 (42Mb)",
-	 {"Whisper Tiny En q8",
-	  "ggml-model-whisper-tiny-en-q8_0",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-tiny.en-q8_0.bin",
-	    "5BC2B3860AA151A4C6E7BB095E1FCCE7CF12C7B020CA08DCEC0C6D018BB7DD94"}}}},
-	{"Whisper Tiny English (74Mb)",
-	 {"Whisper Tiny En",
-	  "ggml-model-whisper-tiny-en",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://ggml.ggerganov.com/ggml-model-whisper-tiny.en.bin",
-	    "921E4CF8686FDD993DCD081A5DA5B6C365BFDE1162E72B08D75AC75289920B1F"}}}},
-	{"Whisper Large v3 (3Gb)",
-	 {"Whisper Large v3",
-	  "ggml-large-v3",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
-	    "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2"}}}},
-	{"Whisper Large v3 q5 (1Gb)",
-	 {"Whisper Large v3 q5",
-	  "ggml-large-v3-q5_0",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-q5_0.bin",
-	    "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"}}}},
-	{"Whisper Large v2 (3Gb)",
-	 {"Whisper Large v2",
-	  "ggml-large-v2",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v2.bin",
-	    "9a423fe4d40c82774b6af34115b8b935f34152246eb19e80e376071d3f999487"}}}},
-	{"Whisper Large v1 (3Gb)",
-	 {"Whisper Large v1",
-	  "ggml-large-v1",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v1.bin",
-	    "7d99f41a10525d0206bddadd86760181fa920438b6b33237e3118ff6c83bb53d"}}}},
-	{"Whisper Medium English (1.5Gb)",
-	 {"Whisper Medium English",
-	  "ggml-meduim-en",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin",
-	    "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356"}}}},
-	{"Whisper Medium (1.5Gb)",
-	 {"Whisper Medium",
-	  "ggml-meduim",
-	  MODEL_TYPE_TRANSCRIPTION,
-	  {{"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
-	    "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208"}}}},
-}};
+#include <obs-module.h>
+
+#include <fstream>
+#include <map>
+#include <string>
+#include <memory>
+#include <sstream>
+#include <optional>
+
+#include <nlohmann/json.hpp>
+#include <curl/curl.h>
+
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+	((std::string *)userp)->append((char *)contents, size * nmemb);
+	return size * nmemb;
+}
+
+/**
+ * @brief Downloads a JSON file from a specified GitHub URL.
+ *
+ * This function uses libcurl to download a JSON file from a GitHub repository.
+ * The downloaded content is stored in the provided string reference.
+ *
+ * @param json_content A reference to a string where the downloaded JSON content will be stored.
+ * @return true if the download was successful and the HTTP response code was 200, false otherwise.
+ *
+ * The function performs the following steps:
+ * - Initializes a CURL session.
+ * - Sets the URL to download the JSON from.
+ * - Sets the callback function to write the downloaded data.
+ * - Follows redirects and sets a timeout of 10 seconds.
+ * - Performs the download operation.
+ * - Checks for errors and logs them using obs_log.
+ * - Cleans up the CURL session.
+ * - Checks the HTTP response code to ensure it is 200 (OK).
+ */
+bool download_json_from_github(std::string &json_content)
+{
+	CURL *curl;
+	CURLcode res;
+	std::string readBuffer;
+	long http_code = 0;
+
+	curl = curl_easy_init();
+	if (curl) {
+		curl_easy_setopt(
+			curl, CURLOPT_URL,
+			"https://raw.githubusercontent.com/locaal-ai/obs-localvocal/master/data/models/models_directory.json");
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L); // Follow redirects
+		curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);       // Set a timeout (10 seconds)
+
+		res = curl_easy_perform(curl);
+
+		if (res != CURLE_OK) {
+			obs_log(LOG_ERROR, "Failed to download JSON from GitHub: %s",
+				curl_easy_strerror(res));
+			curl_easy_cleanup(curl);
+			return false;
+		}
+
+		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+		curl_easy_cleanup(curl);
+
+		if (http_code != 200) {
+			obs_log(LOG_ERROR, "HTTP error: %ld", http_code);
+			return false;
+		}
+	} else {
+		obs_log(LOG_ERROR, "Failed to initialize curl");
+		return false;
+	}
+
+	json_content = readBuffer;
+	return true;
+}
+
+/**
+ * @brief Parses a JSON object to extract model information.
+ *
+ * This function takes a JSON object representing a model and extracts various
+ * fields to populate a ModelInfo structure. It performs validation on the
+ * presence and types of required fields and logs warnings for any missing or
+ * invalid fields.
+ *
+ * @param model The JSON object containing the model information.
+ * @return An optional ModelInfo object. If the required fields are missing or
+ *         invalid, it returns std::nullopt.
+ *
+ * The JSON object is expected to have the following structure:
+ * {
+ *     "friendly_name": "string",          // Required
+ *     "local_folder_name": "string",      // Optional
+ *     "type": "string",                   // Optional, expected values: "MODEL_TYPE_TRANSCRIPTION" or "MODEL_TYPE_TRANSLATION"
+ *     "files": [                          // Optional, array of file objects
+ *         {
+ *             "url": "string",            // Required in each file object
+ *             "sha256": "string"          // Required in each file object
+ *         },
+ *         ...
+ *     ],
+ *     "extra": {                          // Optional
+ *         "language": "string",           // Optional
+ *         "description": "string",        // Optional
+ *         "source": "string"              // Optional
+ *     }
+ * }
+ */
+std::optional<ModelInfo> parse_model_json(const nlohmann::json &model)
+{
+	ModelInfo model_info;
+
+	if (!model.contains("friendly_name") || !model["friendly_name"].is_string()) {
+		obs_log(LOG_WARNING,
+			"Missing or invalid 'friendly_name' for a model. Skipping this model.");
+		return std::nullopt;
+	}
+	model_info.friendly_name = model["friendly_name"].get<std::string>();
+
+	if (model.contains("local_folder_name") && model["local_folder_name"].is_string()) {
+		model_info.local_folder_name = model["local_folder_name"].get<std::string>();
+	} else {
+		obs_log(LOG_WARNING, "Missing or invalid 'local_folder_name' for model: %s",
+			model_info.friendly_name.c_str());
+	}
+
+	if (model.contains("type") && model["type"].is_string()) {
+		const std::string &type_str = model["type"].get<std::string>();
+		if (type_str == "MODEL_TYPE_TRANSCRIPTION")
+			model_info.type = ModelType::MODEL_TYPE_TRANSCRIPTION;
+		else if (type_str == "MODEL_TYPE_TRANSLATION")
+			model_info.type = ModelType::MODEL_TYPE_TRANSLATION;
+		else
+			obs_log(LOG_WARNING, "Invalid 'type' for model: %s",
+				model_info.friendly_name.c_str());
+	} else {
+		obs_log(LOG_WARNING, "Missing or invalid 'type' for model: %s",
+			model_info.friendly_name.c_str());
+	}
+
+	if (model.contains("files") && model["files"].is_array()) {
+		for (const auto &file : model["files"]) {
+			ModelFileDownloadInfo file_info;
+
+			if (file.contains("url") && file["url"].is_string())
+				file_info.url = file["url"].get<std::string>();
+			else
+				obs_log(LOG_WARNING,
+					"Missing or invalid 'url' for a file in model: %s",
+					model_info.friendly_name.c_str());
+
+			if (file.contains("sha256") && file["sha256"].is_string())
+				file_info.sha256 = file["sha256"].get<std::string>();
+
+			model_info.files.push_back(file_info);
+		}
+	} else {
+		obs_log(LOG_WARNING, "Missing or invalid 'files' array for model: %s",
+			model_info.friendly_name.c_str());
+	}
+
+	// Parse the new "extra" field
+	if (model.contains("extra") && model["extra"].is_object()) {
+		const auto &extra = model["extra"];
+		if (extra.contains("language") && extra["language"].is_string())
+			model_info.extra.language = extra["language"].get<std::string>();
+		if (extra.contains("description") && extra["description"].is_string())
+			model_info.extra.description = extra["description"].get<std::string>();
+		if (extra.contains("source") && extra["source"].is_string())
+			model_info.extra.source = extra["source"].get<std::string>();
+	}
+
+	return model_info;
+}
+
+/**
+ * @brief Loads model information from a JSON source.
+ *
+ * This function attempts to download a JSON file containing model information from GitHub.
+ * If the download fails, it falls back to loading the JSON file from a local directory.
+ * The JSON file is expected to contain an array of models under the key "models".
+ * Each model's information is parsed and stored in a map with the model's friendly name as the key.
+ *
+ * @return A map where the keys are model friendly names and the values are ModelInfo objects.
+ */
+std::map<std::string, ModelInfo> load_models_info()
+{
+	std::map<std::string, ModelInfo> models_info_map;
+	nlohmann::json model_directory_json;
+
+	// Try to download from GitHub first
+	std::string github_json_content;
+	bool download_success = download_json_from_github(github_json_content);
+
+	if (download_success) {
+		obs_log(LOG_INFO, "Successfully downloaded models directory from GitHub");
+		std::istringstream json_stream(github_json_content);
+		json_stream >> model_directory_json;
+	} else {
+		// Fall back to local file
+		obs_log(LOG_INFO, "Falling back to local models directory file");
+		char *model_directory_json_file = obs_module_file("models/models_directory.json");
+		if (model_directory_json_file == nullptr) {
+			obs_log(LOG_ERROR, "Cannot find local model directory file");
+			return models_info_map;
+		}
+		obs_log(LOG_INFO, "Local model directory file: %s", model_directory_json_file);
+		std::string model_directory_file_str = std::string(model_directory_json_file);
+		bfree(model_directory_json_file);
+
+		std::ifstream model_directory_file(model_directory_file_str);
+		if (!model_directory_file.is_open()) {
+			obs_log(LOG_ERROR, "Failed to open local model directory file");
+			return models_info_map;
+		}
+
+		model_directory_file >> model_directory_json;
+	}
+
+	if (!model_directory_json.contains("models") ||
+	    !model_directory_json["models"].is_array()) {
+		obs_log(LOG_ERROR, "Invalid JSON structure: 'models' array not found");
+		return models_info_map;
+	}
+
+	for (const auto &model : model_directory_json["models"]) {
+		auto model_info_opt = parse_model_json(model);
+		if (model_info_opt) {
+			models_info_map[model_info_opt->friendly_name] = *model_info_opt;
+		}
+	}
+
+	obs_log(LOG_INFO, "Loaded %zu models", models_info_map.size());
+
+	return models_info_map;
+}
+
+const std::map<std::string, ModelInfo> &models_info()
+{
+	static const std::unique_ptr<const std::map<std::string, ModelInfo>> cached_models_info =
+		std::make_unique<const std::map<std::string, ModelInfo>>(load_models_info());
+
+	return *cached_models_info;
+}
+
+const std::vector<ModelInfo> get_sorted_models_info()
+{
+	const auto &models_map = models_info();
+	std::vector<ModelInfo> standard_models;
+	std::vector<ModelInfo> huggingface_models;
+
+	// Separate models into two categories
+	for (const auto &[key, model] : models_map) {
+		if (!model.extra.source.empty()) {
+			huggingface_models.push_back(model);
+		} else {
+			standard_models.push_back(model);
+		}
+	}
+
+	// Sort both vectors based on friendly_name
+	auto sort_by_name = [](const ModelInfo &a, const ModelInfo &b) {
+		return a.friendly_name < b.friendly_name;
+	};
+	std::sort(standard_models.begin(), standard_models.end(), sort_by_name);
+	std::sort(huggingface_models.begin(), huggingface_models.end(), sort_by_name);
+
+	// Combine the sorted vectors with a separator
+	std::vector<ModelInfo> result = std::move(standard_models);
+	if (!huggingface_models.empty()) {
+		ModelInfo info;
+		info.friendly_name = "--------- HuggingFace Models ---------";
+		info.type = ModelType::MODEL_TYPE_TRANSCRIPTION;
+		result.push_back(info);
+		result.insert(result.end(), huggingface_models.begin(), huggingface_models.end());
+	}
+
+	return result;
+}
