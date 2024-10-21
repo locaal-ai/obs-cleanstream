@@ -130,4 +130,4 @@ To build with cuda add `CPU_OR_CUDA` as an environment variable (with `cpu`, `12
 ```
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=occ-ai/obs-cleanstream&type=Date)](https://star-history.com/#occ-ai/obs-cleanstream&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=locaal-ai/obs-cleanstream&type=Date)](https://star-history.com/#locaal-ai/obs-cleanstream&Date)
