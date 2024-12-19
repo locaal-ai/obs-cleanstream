@@ -1,25 +1,17 @@
-# obs-cleanstream
+# ⚠️ Stalled ⚠️ This project is not under active developmet
+
+## Cleanstream - Live Speech Filter using AI
 
 CleanStream is an OBS plugin that cleans live audio streams from unwanted words and utterances using real-time local AI.
 
 <div align="center">
 
-[![GitHub](https://img.shields.io/github/license/occ-ai/obs-cleanstream)](https://github.com/occ-ai/obs-cleanstream/blob/main/LICENSE)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/occ-ai/obs-cleanstream/push.yaml)](https://github.com/occ-ai/obs-cleanstream/actions/workflows/push.yaml)
-[![Total downloads](https://img.shields.io/github/downloads/occ-ai/obs-cleanstream/total)](https://github.com/occ-ai/obs-cleanstream/releases)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/occ-ai/obs-cleanstream)](https://github.com/occ-ai/obs-cleanstream/releases)
-[![Discord](https://img.shields.io/discord/1200229425141252116)](https://discord.gg/KbjGU2vvUz)
+[![GitHub](https://img.shields.io/github/license/locaal-ai/obs-cleanstream)](https://github.com/locaal-ai/obs-cleanstream/blob/main/LICENSE)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/locaal-ai/obs-cleanstream/push.yaml)](https://github.com/locaal-ai/obs-cleanstream/actions/workflows/push.yaml)
+[![Total downloads](https://img.shields.io/github/downloads/locaal-ai/obs-cleanstream/total)](https://github.com/locaal-ai/obs-cleanstream/releases)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/locaal-ai/obs-cleanstream)](https://github.com/locaal-ai/obs-cleanstream/releases)
 
 </div>
-
-If this *free* plugin has been valuable to you consider adding a ⭐ to this GH repo, rating it [on OBS](https://obsproject.com/forum/resources/cleanstream-remove-uhs-ums-profanity-in-your-live-stream-or-recording-with-ai.1732/), subscribing to [my YouTube channel](https://www.youtube.com/@royshilk) where I post updates, and supporting my work on [GitHub](https://github.com/sponsors/royshil) or [Patreon](https://www.patreon.com/RoyShilkrot) 🙏
-
-Check out our other plugins:
-- [Background Removal](https://github.com/occ-ai/obs-backgroundremoval) remove background (virtual green screen) from video
-- [Detect](https://github.com/occ-ai/obs-detect) will detect and track >80 types of objects in any OBS source
-- [URL/API Source](https://github.com/occ-ai/obs-urlsource) fetch API data and display it on screen as a video source
-- [LocalVocal](https://github.com/occ-ai/obs-localvocal) speech AI assistant plugin for real-time transcription (captions), translation and more language functions
-- [PolyGlot](https://github.com/occ-ai/obs-polyglot) a realtime local translation service based on AI.
 
 ## Usage
 
@@ -28,12 +20,12 @@ Check out our other plugins:
 
 <div align="center">
 
-<a href="https://youtu.be/vgcK3K654FU"><img src="https://github.com/occ-ai/obs-cleanstream/assets/441170/59f0038a-4e0e-47ed-afb8-110acd463146" width="40%" /></a>
+<a href="https://youtu.be/vgcK3K654FU"><img src="https://github.com/locaal-ai/obs-cleanstream/assets/441170/59f0038a-4e0e-47ed-afb8-110acd463146" width="40%" /></a>
 
 </div>
 
 ## Download
-Check out the [latest releases](https://github.com/occ-ai/obs-cleanstream/releases) for downloads and install instructions.
+Check out the [latest releases](https://github.com/locaal-ai/obs-cleanstream/releases) for downloads and install instructions.
 
 ## Method
 This video walkthrough (YouTube) will explain various parts of the code if you're looking to learn from what I've discovered.
@@ -68,7 +60,7 @@ It is using a neural network ([OpenAI Whisper](https://github.com/openai/whisper
 
 It's using the [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) project from [ggerganov](https://github.com/ggerganov) to run the Whisper network in a very efficient way.
 
-But it is working and you can try it out. *Please report any issues you find.* 🙏 ([submit an issue](https://github.com/occ-ai/obs-cleanstream/issues) or meet us on https://discord.gg/KbjGU2vvUz)
+But it is working and you can try it out. *Please report any issues you find.* 🙏 ([submit an issue](https://github.com/locaal-ai/obs-cleanstream/issues) or meet us on https://discord.gg/KbjGU2vvUz)
 
 We're working on improving the plugin and adding more features. If you have any ideas or suggestions, please open an issue.
 
